@@ -1,193 +1,177 @@
 # Deployment Guide
 
-## Current Deployment: Fly.io (Recommended)
+## Current Deployment: GitHub Actions Continuous Loop
 
-The bot is deployed to **Fly.io** for 24/7 operation. GitHub Actions handles automatic deployment when you push to the main branch.
+The bot runs **entirely on GitHub Actions** with **no external services or tokens required**. The workflow automatically restarts itself every ~5.5 hours, creating a continuous 24/7 operation.
 
 ### How It Works
 
 1. Push code to GitHub (main branch)
-2. GitHub Actions builds the Docker image
-3. Deploys to Fly.io automatically
-4. Bot runs continuously on Fly.io (never stops)
-5. Auto-restarts if it crashes
+2. GitHub Actions workflow starts
+3. Bot runs for 5 hours 45 minutes
+4. Before 6-hour timeout, workflow commits a trigger file
+5. New workflow starts automatically
+6. Loop continues forever → 24/7 operation!
 
-### Initial Setup (One-time)
+### Initial Setup
 
-1. **Install Fly CLI locally**:
-   ```bash
-   curl -L https://fly.io/install.sh | sh
-   ```
+**1. Add GitHub Secrets** (one-time):
 
-2. **Login to Fly.io**:
-   ```bash
-   fly auth login
-   ```
+Go to: https://github.com/Mehrrun/netblocks/settings/secrets/actions
 
-3. **Create the app** (first time only):
-   ```bash
-   fly launch --no-deploy
-   # Choose app name: netblocks-bot
-   # Choose region: Amsterdam (ams) or closest to you
-   ```
+Add these secrets:
+- `TELEGRAM_BOT_TOKEN` = Your bot token
+- `TELEGRAM_CHANNEL` = IranBlackoutMonitor
 
-4. **Set secrets on Fly.io**:
-   ```bash
-   fly secrets set TELEGRAM_BOT_TOKEN=your_token_here
-   fly secrets set TELEGRAM_CHANNEL=IranBlackoutMonitor
-   ```
-
-5. **Get Fly API token for GitHub Actions**:
-   ```bash
-   fly tokens create deploy
-   ```
-   Copy the token, then add it to GitHub:
-   - Go to your repo → Settings → Secrets and variables → Actions
-   - Add secret: `FLY_API_TOKEN` = (paste the token)
-
-6. **Deploy**:
-   ```bash
-   git push origin main
-   ```
-   GitHub Actions will automatically deploy to Fly.io!
-
-### Managing the Bot
-
-**View status**:
+**2. Push to deploy**:
 ```bash
-fly status --app netblocks-bot
+git push origin main
 ```
 
-**View logs**:
-```bash
-fly logs --app netblocks-bot
+That's it! No external services, no API tokens, no authentication needed.
+
+### How It Works Technically
+
+```
+Workflow 1: Runs bot for 5h 45m → Commits .trigger file → Exits
+                                          ↓
+Workflow 2: Triggered by .trigger commit → Runs bot for 5h 45m → Commits → Exits
+                                                                    ↓
+Workflow 3: ...and so on forever
 ```
 
-**Restart bot**:
+**Key Features**:
+- ✅ **No External Services**: Runs entirely on GitHub
+- ✅ **No Extra Tokens**: Only needs GitHub's built-in `GITHUB_TOKEN`
+- ✅ **24/7 Operation**: Auto-restarts before timeout
+- ✅ **Free**: Uses GitHub Actions free tier
+- ✅ **Auto-Deploy**: Push = instant deployment
+- ✅ **No Setup**: Just add secrets and push
+
+### Monitoring
+
+**View bot status**:
+- Go to: https://github.com/Mehrrun/netblocks/actions
+- Click on the running workflow
+- View logs in "Run for 5 hours 45 minutes" step
+
+**Stop the bot**:
+- Go to: https://github.com/Mehrrun/netblocks/actions
+- Click on the running workflow
+- Click "Cancel workflow"
+
+**Restart the bot**:
 ```bash
-fly apps restart netblocks-bot
+# Make any commit or manually trigger
+git commit --allow-empty -m "Restart bot"
+git push
 ```
 
-**Scale resources** (if needed):
-```bash
-fly scale memory 512 --app netblocks-bot
-```
-
-**SSH into the machine**:
-```bash
-fly ssh console --app netblocks-bot
-```
+Or use the "Actions" tab → "Run Bot Continuously" → "Run workflow"
 
 ### Advantages
 
-- ✅ **24/7 Uptime**: Runs continuously, no timeouts
-- ✅ **Auto-Deploy**: Push to GitHub = automatic deployment
-- ✅ **Auto-Restart**: Crashes are automatically recovered
-- ✅ **Free Tier**: Sufficient for this bot
-- ✅ **Global CDN**: Fast worldwide
-- ✅ **Easy Logs**: `fly logs` command
+- ✅ **Zero Setup**: No external accounts or tokens
+- ✅ **Free Forever**: GitHub Actions free tier includes 2000 minutes/month (bot uses ~1440 min/month)
+- ✅ **Reliable**: Automatic restarts every 5.5 hours
+- ✅ **Simple**: No complex infrastructure
+- ✅ **Transparent**: All logs visible in GitHub Actions
+
+### Limitations
+
+- ⚠️ **Public repos only** for free tier (or use GitHub Pro)
+- ⚠️ **2000 minutes/month limit** (sufficient for this bot)
+- ⚠️ **5-10 second downtime** during restarts (minimal)
+
+### Troubleshooting
+
+**Bot not responding**:
+- Check: https://github.com/Mehrrun/netblocks/actions
+- View the latest workflow run
+- Check logs for errors
+
+**Workflow not restarting**:
+- GitHub may rate-limit auto-commits
+- Manually trigger: Actions → Run workflow
+
+**Secrets not working**:
+- Verify secrets are set: Settings → Secrets → Actions
+- Check for typos in secret names
 
 ### Cost
 
-**Free tier includes**:
-- Up to 3 shared-cpu-1x VMs
-- 256MB RAM per VM
-- 160GB outbound data transfer
+**Completely FREE** if:
+- Repository is public (unlimited minutes), OR
+- You have GitHub Pro (3000 minutes/month)
 
-This bot uses minimal resources and fits comfortably in the free tier.
+For private repos on free tier:
+- 2000 minutes/month free
+- Bot uses ~1440 minutes/month (60 min/day × 24 days)
+- **You have 560 minutes spare!**
 
-## Alternative: GitHub Actions with systemd (Development Only)
+## Alternative: Local Deployment
 
-For testing purposes, you can run with systemd on GitHub Actions, but it will timeout after 6 hours.
+**Run locally with systemd** (VPS/server):
 
-See the `netblocks-bot.service` file for systemd configuration.
+1. Copy bot binary to server
+2. Create systemd service:
+
+```bash
+sudo nano /etc/systemd/system/netblocks-bot.service
+```
+
+```ini
+[Unit]
+Description=NetBlocks Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=yourusername
+WorkingDirectory=/home/yourusername/netblocks
+Environment="TELEGRAM_BOT_TOKEN=your_token"
+Environment="TELEGRAM_CHANNEL=IranBlackoutMonitor"
+ExecStart=/home/yourusername/netblocks/netblocks-telegram-bot
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Start service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable netblocks-bot
+sudo systemctl start netblocks-bot
+```
 
 ## Local Development
 
 **Run locally**:
 ```bash
-# Set environment variables
 export TELEGRAM_BOT_TOKEN=your_token
 export TELEGRAM_CHANNEL=your_channel
 
-# Build and run
-go build -o netblocks-telegram-bot ./cmd/telegram-bot
+go run ./cmd/telegram-bot
+```
+
+**Build and run**:
+```bash
+make telegram-bot
 ./netblocks-telegram-bot
-```
-
-**Run with Docker**:
-```bash
-# Build image
-docker build -t netblocks-bot .
-
-# Run container
-docker run -e TELEGRAM_BOT_TOKEN=your_token \
-           -e TELEGRAM_CHANNEL=your_channel \
-           netblocks-bot
-```
-
-## Monitoring
-
-**Fly.io Dashboard**: https://fly.io/dashboard
-- View app status
-- Check metrics (CPU, memory, network)
-- View deployment history
-
-**Telegram**: 
-- Send `/status` to your bot
-- Bot sends updates to your channel every 10 minutes
-
-**Logs**:
-```bash
-# Follow logs in real-time
-fly logs --app netblocks-bot
-
-# Show last 100 lines
-fly logs --app netblocks-bot -n 100
-```
-
-## Troubleshooting
-
-**Bot not responding**:
-```bash
-# Check if app is running
-fly status --app netblocks-bot
-
-# View recent logs
-fly logs --app netblocks-bot
-
-# Restart if needed
-fly apps restart netblocks-bot
-```
-
-**Deployment fails**:
-```bash
-# Check deployment logs in GitHub Actions
-# Or deploy manually:
-fly deploy
-```
-
-**Update secrets**:
-```bash
-fly secrets set TELEGRAM_BOT_TOKEN=new_token --app netblocks-bot
-```
-
-**View all secrets** (names only, not values):
-```bash
-fly secrets list --app netblocks-bot
 ```
 
 ## Production Checklist
 
-- ✅ Fly.io app created
-- ✅ Secrets set (TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL)
-- ✅ FLY_API_TOKEN added to GitHub secrets
-- ✅ GitHub Actions workflow configured
-- ✅ Bot deployed and running
-- ✅ Bot responding to Telegram commands
-- ✅ Channel receiving updates
+- ✅ GitHub secrets configured (TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL)
+- ✅ .trigger file exists in repo
+- ✅ Workflow file in .github/workflows/deploy.yml
+- ✅ First workflow triggered (push to main)
+- ✅ Bot responding to /status command
+- ✅ Channel receiving periodic updates
 
 ## Support
 
-- Fly.io Docs: https://fly.io/docs/
-- Fly.io Community: https://community.fly.io/
+- GitHub Actions: https://docs.github.com/en/actions
+- Issues: https://github.com/Mehrrun/netblocks/issues

@@ -1,37 +1,144 @@
-name: Deploy to Fly.io
+name: Run Bot Continuously
 
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - '.github/workflows/deploy.yml'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.trigger'
   workflow_dispatch:
 
 jobs:
-  deploy:
+  run-bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 350  # 5 hours 50 minutes (before 6-hour limit)
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
       
-    - name: Setup Fly CLI
-      uses: superfly/flyctl-actions/setup-flyctl@master
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
       
-    - name: Deploy to Fly.io
-      run: flyctl deploy --remote-only
-      env:
-        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        
-    - name: Set Fly secrets
+    - name: Verify secrets
       run: |
-        flyctl secrets set TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" --app netblocks-bot
-        flyctl secrets set TELEGRAM_CHANNEL="${{ secrets.TELEGRAM_CHANNEL }}" --app netblocks-bot
-      env:
-        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        
-    - name: Deployment complete
+        if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+          echo "Error: TELEGRAM_BOT_TOKEN secret not set"
+          exit 1
+        fi
+        echo "✓ Secrets verified"
+      
+    - name: Create config.json
       run: |
-        echo "✅ Deployment completed successfully!"
-        echo "Bot is now running on Fly.io"
-        echo ""
-        echo "Check status: flyctl status --app netblocks-bot"
-        echo "View logs: flyctl logs --app netblocks-bot"
+        cat > config.json << EOF
+        {
+          "telegram_bot_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
+          "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
+          "interval": "10m"
+        }
+        EOF
+        echo "✓ Config file created"
+        
+    - name: Validate JSON
+      run: python3 -m json.tool config.json > /dev/null && echo "✓ JSON valid"
+      
+    - name: Build bot
+      run: |
+        go build -o netblocks-telegram-bot ./cmd/telegram-bot
+        chmod +x netblocks-telegram-bot
+        echo "✓ Bot built successfully"
+      
+    - name: Start bot in background
+      run: |
+        nohup ./netblocks-telegram-bot > bot.log 2>&1 &
+        BOT_PID=$!
+        echo $BOT_PID > bot.pid
+        echo "✓ Bot started with PID: $BOT_PID"
+        
+    - name: Wait for initialization
+      run: sleep 5
+      
+    - name: Verify bot is running
+      run: |
+        if kill -0 $(cat bot.pid) 2>/dev/null; then
+          echo "✓ Bot is running"
+          echo "Recent logs:"
+          tail -20 bot.log
+        else
+          echo "✗ Bot failed to start"
+          cat bot.log
+          exit 1
+        fi
+    
+    - name: Run for 5 hours 45 minutes
+      run: |
+        echo "Bot will run for 5 hours 45 minutes, then auto-restart..."
+        BOT_PID=$(cat bot.pid)
+        
+        # Run for 5 hours 45 minutes (20700 seconds)
+        for i in {1..138}; do
+          if ! kill -0 $BOT_PID 2>/dev/null; then
+            echo "✗ Bot process died, check logs:"
+            tail -50 bot.log
+            exit 1
+          fi
+          
+          # Every 2.5 minutes, show status
+          echo "Bot running... (check $i/138)"
+          sleep 150
+        done
+        
+        echo "✓ Bot ran successfully for 5h 45m"
+        echo "Final logs:"
+        tail -30 bot.log
+    
+    - name: Stop bot gracefully
+      run: |
+        if [ -f bot.pid ]; then
+          BOT_PID=$(cat bot.pid)
+          if kill -0 $BOT_PID 2>/dev/null; then
+            echo "Stopping bot (PID: $BOT_PID)..."
+            kill -TERM $BOT_PID
+            sleep 2
+          fi
+        fi
+    
+    - name: Trigger next run
+      if: always()
+      run: |
+        git config user.name "NetBlocks Bot"
+        git config user.email "bot@netblocks.local"
+        
+        # Update timestamp to trigger new workflow
+        date +%s > .trigger
+        
+        git add .trigger
+        git commit -m "Auto-restart bot [skip ci] $(date)"
+        git push
+        
+        echo "✅ Next workflow triggered!"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Cleanup old runs to save space
+  cleanup:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: run-bot
+    
+    steps:
+    - name: Delete old workflow runs
+      uses: Mattraks/delete-workflow-runs@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: ${{ github.repository }}
+        retain_days: 1
+        keep_minimum_runs: 3
