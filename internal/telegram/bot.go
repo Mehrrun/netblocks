@@ -568,11 +568,12 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 						continue
 					}
 					
-					// Send to channel if it's time (every 1 minute)
+					// Send to channel if it's time (every 10 minutes)
 					if shouldSendChannelUpdate {
 						log.Printf("📢 Sending periodic update to channel: %s (interval: %v)", b.channelID, channelInterval)
 						b.sendStatusMessages(b.channelID, result)
 						lastChannelUpdateTime = time.Now()
+						log.Printf("✅ Channel update sent successfully to: %s", b.channelID)
 					}
 					
 					// Send to subscribed users if it's time

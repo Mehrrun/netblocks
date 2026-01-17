@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/netblocks/netblocks/internal/config"
 	"github.com/netblocks/netblocks/internal/models"
@@ -31,6 +32,16 @@ func main() {
 			log.Fatal("Telegram bot token not found. Set TELEGRAM_BOT_TOKEN environment variable or add it to config.json")
 		}
 		cfg.TelegramToken = token
+		log.Println("✓ Telegram token loaded from environment variable")
+	}
+
+	// Check for Telegram channel from environment variable
+	if cfg.TelegramChannel == "" {
+		channel := os.Getenv("TELEGRAM_CHANNEL")
+		if channel != "" {
+			cfg.TelegramChannel = channel
+			log.Printf("✓ Telegram channel loaded from environment variable: %s", channel)
+		}
 	}
 
 	// Create monitor
@@ -65,14 +76,27 @@ func main() {
 	// Start periodic updates
 	go bot.SendPeriodicUpdates(ctx)
 
-	log.Println("NetBlocks Telegram Bot started. Press Ctrl+C to stop.")
+	log.Println("✅ NetBlocks Telegram Bot started successfully!")
+	log.Println("📊 Monitoring Iranian ASNs and DNS servers...")
+	log.Println("🤖 Bot is ready to receive commands")
+	if cfg.TelegramChannel != "" {
+		log.Printf("📢 Channel updates enabled for: %s", cfg.TelegramChannel)
+		log.Println("   Channel will receive updates every 10 minutes")
+	}
+	log.Println("")
+	log.Println("⚠️  Note: In production, this process should run continuously.")
+	log.Println("   Press Ctrl+C to stop (or send SIGTERM signal).")
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down...")
+	log.Println("Shutting down gracefully...")
 	cancel()
+	
+	// Give goroutines time to clean up
+	time.Sleep(2 * time.Second)
+	log.Println("Shutdown complete.")
 }
 
