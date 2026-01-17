@@ -89,19 +89,20 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	// Start bot - this blocks until context is cancelled
-	// Run in goroutine so we can handle signals
+	// Handle signals in a goroutine
 	go func() {
-		bot.Start(ctx)
+		<-sigChan
+		log.Println("")
+		log.Println("Received shutdown signal, shutting down gracefully...")
+		cancel()
 	}()
 
-	// Wait for shutdown signal - bot runs continuously
-	<-sigChan
-	log.Println("")
-	log.Println("Received shutdown signal, shutting down gracefully...")
-	cancel()
+	// Start bot - this blocks and keeps the process alive
+	// Bot will stop when context is cancelled (by signal handler or error)
+	bot.Start(ctx)
 	
 	// Give goroutines time to clean up
+	log.Println("Bot stopped, cleaning up...")
 	time.Sleep(1 * time.Second)
 	log.Println("Shutdown complete.")
 }
