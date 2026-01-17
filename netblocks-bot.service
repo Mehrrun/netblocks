@@ -1,0 +1,19 @@
+[Unit]
+Description=NetBlocks Telegram Bot - Iranian Network Monitoring
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/runner/work/NetBlocks/NetBlocks
+Environment="TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}"
+Environment="TELEGRAM_CHANNEL=${TELEGRAM_CHANNEL}"
+ExecStart=/home/runner/work/NetBlocks/NetBlocks/netblocks-telegram-bot
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=netblocks-bot
+
+[Install]
+WantedBy=multi-user.target
+
