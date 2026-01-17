@@ -538,7 +538,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 				}
 			}
 			
-			// Check if it's time to send channel update (every 1 minute)
+			// Check if it's time to send channel update (every 10 minutes)
 			shouldSendChannelUpdate := false
 			if b.channelID != "" {
 				// If lastChannelUpdateTime is zero (startup), send immediately
@@ -546,6 +546,8 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 					shouldSendChannelUpdate = true
 					if lastChannelUpdateTime.IsZero() {
 						log.Printf("🚀 Sending initial channel update to: %s", b.channelID)
+					} else {
+						log.Printf("⏰ Channel update interval reached: %v elapsed", timeSinceLastChannelUpdate)
 					}
 				}
 			}
