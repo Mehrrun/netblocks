@@ -1,2 +1,2 @@
-worker: ./netblocks-telegram-bot
+web: ./netblocks-telegram-bot
 

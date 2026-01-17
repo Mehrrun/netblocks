@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -102,73 +100,20 @@ func main() {
 	}
 	log.Println("")
 	log.Println("🔄 Bot is running continuously...")
-
-	// Start HTTP health check server for Railway/cloud platforms
-	// This helps Railway detect that the process is alive
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "OK - Bot is running (PID: %d)", os.Getpid())
-	})
-	
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "NetBlocks Telegram Bot is running\nPID: %d\nUptime: Active", os.Getpid())
-	})
-	
-	server := &http.Server{
-		Addr:         ":" + port,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
-	
-	go func() {
-		log.Printf("🌐 Health check server started on port %s", port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Health check server error: %v", err)
-		}
-	}()
+	log.Println("✅ OK - Bot is running in background")
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	// Keep the main process alive - this is critical for Railway/cloud platforms
-	// The main goroutine must stay alive or Railway will kill the process
-	heartbeat := time.NewTicker(5 * time.Minute)
-	defer heartbeat.Stop()
-
-	// Main loop - keeps process alive
-	for {
-		select {
-		case sig := <-sigChan:
-			log.Printf("Received signal: %v", sig)
-			log.Println("Shutting down gracefully...")
-			
-			// Shutdown HTTP server
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			server.Shutdown(shutdownCtx)
-			shutdownCancel()
-			
-			cancel()
-			// Give goroutines time to clean up
-			time.Sleep(2 * time.Second)
-			log.Println("Shutdown complete.")
-			return
-		case <-ctx.Done():
-			log.Println("Context cancelled, shutting down...")
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			server.Shutdown(shutdownCtx)
-			shutdownCancel()
-			return
-		case <-heartbeat.C:
-			// Periodic heartbeat to show process is alive
-			log.Printf("💓 Bot heartbeat - still running (PID: %d)", os.Getpid())
-		}
-	}
+	// Keep the main process alive - block on signal channel
+	// This keeps the process running in the background
+	<-sigChan
+	log.Printf("Received shutdown signal")
+	log.Println("Shutting down gracefully...")
+	cancel()
+	// Give goroutines time to clean up
+	time.Sleep(2 * time.Second)
+	log.Println("Shutdown complete.")
 }
 
