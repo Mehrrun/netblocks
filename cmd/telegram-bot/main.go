@@ -71,12 +71,24 @@ func main() {
 
 	// Start monitor
 	go mon.Start(ctx)
+	log.Println("✅ Monitor started")
 
-	// Start bot
-	go bot.Start(ctx)
+	// Start bot (this blocks, so run in goroutine)
+	go func() {
+		log.Println("🚀 Starting Telegram bot...")
+		bot.Start(ctx)
+		log.Println("⚠️ Bot stopped!")
+	}()
 
 	// Start periodic updates
-	go bot.SendPeriodicUpdates(ctx)
+	go func() {
+		log.Println("🔄 Starting periodic updates...")
+		bot.SendPeriodicUpdates(ctx)
+		log.Println("⚠️ Periodic updates stopped!")
+	}()
+
+	// Give bot time to initialize
+	time.Sleep(3 * time.Second)
 
 	log.Println("✅ NetBlocks Telegram Bot started successfully!")
 	log.Println("📊 Monitoring Iranian ASNs and DNS servers...")

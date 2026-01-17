@@ -28,10 +28,25 @@ type Bot struct {
 
 // NewBot creates a new Telegram bot
 func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.MonitoringResult, error)) (*Bot, error) {
+	if token == "" {
+		return nil, fmt.Errorf("telegram bot token is empty")
+	}
+	
+	log.Printf("🔑 Initializing Telegram bot with token: %s...", token[:10]+"...")
+	
 	api, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bot: %w", err)
+		return nil, fmt.Errorf("failed to create bot API client: %w", err)
 	}
+
+	// Test the connection by getting bot info
+	botInfo, err := api.GetMe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify bot token (GetMe failed): %w", err)
+	}
+
+	log.Printf("✅ Successfully authorized as bot: @%s (ID: %d, Name: %s)", 
+		botInfo.UserName, botInfo.ID, botInfo.FirstName)
 
 	// Default to 10 minutes if not set
 	updateInterval := cfg.Interval
@@ -51,6 +66,9 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 			// If it doesn't start with @ or - (negative chat ID), assume it's a username
 			channelID = "@" + channelID
 		}
+		log.Printf("📢 Channel configured: %s", channelID)
+	} else {
+		log.Printf("⚠️  No channel configured - channel updates disabled")
 	}
 
 	bot := &Bot{
@@ -62,13 +80,7 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 		channelID:        channelID,
 	}
 
-	log.Printf("Authorized on account %s", api.Self.UserName)
-	if channelID != "" {
-		log.Printf("✅ Channel updates enabled for: %s", channelID)
-		log.Printf("📋 Channel ID type: %T, value: %v", channelID, channelID)
-	} else {
-		log.Printf("⚠️  No channel configured - channel updates disabled")
-	}
+	log.Printf("✅ Bot initialized successfully")
 	return bot, nil
 }
 
@@ -92,20 +104,34 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 
 // Start starts the bot
 func (b *Bot) Start(ctx context.Context) {
+	log.Println("🤖 Starting Telegram bot update handler...")
+	
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
 	updates := b.api.GetUpdatesChan(u)
+	log.Println("✅ Telegram bot update channel initialized, waiting for messages...")
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("🛑 Bot context cancelled, stopping update handler...")
 			return
 		case update := <-updates:
 			if update.Message == nil {
+				// Handle callback queries (button presses) if needed
+				if update.CallbackQuery != nil {
+					log.Printf("📥 Received callback query from user %d", update.CallbackQuery.From.ID)
+					// You can add callback handling here if needed
+				}
 				continue
 			}
 
+			log.Printf("📥 Received message from user %d (@%s): %s", 
+				update.Message.From.ID, 
+				update.Message.From.UserName,
+				update.Message.Text)
+			
 			b.handleMessage(update.Message)
 		}
 	}
@@ -115,25 +141,38 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	// Add user to subscribed chats when they interact with the bot
 	b.addSubscribedChat(msg.Chat.ID)
 	
-	command := strings.ToLower(msg.Text)
+	// Handle empty messages
+	if msg.Text == "" {
+		log.Printf("⚠️ Received message with empty text from user %d", msg.Chat.ID)
+		return
+	}
+	
+	command := strings.ToLower(strings.TrimSpace(msg.Text))
+	log.Printf("🔍 Processing command: %s", command)
 	
 	switch {
 	case strings.HasPrefix(command, "/start"):
+		log.Println("📤 Sending welcome message...")
 		b.sendWelcome(msg.Chat.ID)
 	case strings.HasPrefix(command, "/status"):
+		log.Println("📤 Sending status update...")
 		b.sendStatus(msg.Chat.ID)
 	case strings.HasPrefix(command, "/interval"):
 		parts := strings.Fields(command)
 		if len(parts) > 1 {
+			log.Printf("📤 Setting interval to %s minutes...", parts[1])
 			b.handleSetInterval(msg.Chat.ID, parts[1])
 		} else {
 			b.sendMessage(msg.Chat.ID, "Usage: /interval <minutes>\nExample: /interval 5")
 		}
 	case strings.HasPrefix(command, "/testchannel"):
+		log.Println("📤 Testing channel...")
 		b.handleTestChannel(msg.Chat.ID)
 	case strings.HasPrefix(command, "/help"):
+		log.Println("📤 Sending help message...")
 		b.sendHelp(msg.Chat.ID)
 	default:
+		log.Printf("❓ Unknown command: %s", command)
 		b.sendMessage(msg.Chat.ID, "Unknown command. Use /help to see available commands.")
 	}
 }
