@@ -23,10 +23,14 @@ jobs:
       
     - name: Build Telegram Bot
       run: |
+        echo "Building Telegram Bot..."
         go build -o netblocks-telegram-bot ./cmd/telegram-bot
+        echo "Build complete!"
+        ls -lh netblocks-telegram-bot
         
     - name: Verify secrets are set
       run: |
+        echo "Verifying secrets..."
         if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
           echo "ERROR: TELEGRAM_BOT_TOKEN secret is not set!"
           exit 1
@@ -39,6 +43,7 @@ jobs:
         
     - name: Create config.json from secrets
       run: |
+        echo "Creating config.json..."
         cat > config.json << EOF
         {
           "telegram_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
@@ -50,29 +55,29 @@ jobs:
         }
         EOF
         echo "✓ Config file created"
-        # Verify config.json exists and is valid JSON
         if [ ! -f config.json ]; then
           echo "ERROR: config.json was not created!"
           exit 1
         fi
-        # Check if JSON is valid (basic check)
         python3 -m json.tool config.json > /dev/null || (echo "ERROR: config.json is not valid JSON!" && exit 1)
         echo "✓ Config file is valid JSON"
         
     - name: Verify Bot Binary
       run: |
+        echo "Verifying bot binary..."
         if [ ! -f netblocks-telegram-bot ]; then
           echo "❌ Binary not found!"
           exit 1
         fi
         chmod +x netblocks-telegram-bot
         echo "✅ Binary is ready"
+        file netblocks-telegram-bot
         
-    - name: Start Telegram Bot (Background)
+    - name: Start Telegram Bot
       run: |
         echo "🚀 Starting NetBlocks Telegram Bot in background..."
         
-        # Run bot in background and save PID
+        # Run bot in background
         nohup ./netblocks-telegram-bot > bot.log 2>&1 &
         BOT_PID=$!
         echo $BOT_PID > bot.pid
@@ -91,15 +96,6 @@ jobs:
           echo "----------------------------------------"
           echo ""
           echo "✅ Deployment completed successfully!"
-          echo ""
-          echo "⚠️  IMPORTANT: GitHub Actions is not suitable for long-running services."
-          echo "   The bot will run until the workflow times out (6 hours max on free tier)."
-          echo ""
-          echo "📖 For 24/7 production deployment, see DEPLOYMENT.md for options:"
-          echo "   - Railway.app (recommended)"
-          echo "   - Render.com"
-          echo "   - Fly.io"
-          echo "   - VPS with systemd"
         else
           echo "❌ Bot process died immediately!"
           echo ""
@@ -119,14 +115,12 @@ jobs:
         echo "=========================================="
         echo "✅ DEPLOYMENT COMPLETE"
         echo "=========================================="
-        echo ""
         echo "Bot Status: Running"
         echo "PID: $(cat bot.pid 2>/dev/null || echo 'N/A')"
         echo ""
-        echo "Note: This workflow will continue running to keep the bot alive."
-        echo "For production use, deploy to Railway, Render, Fly.io, or a VPS."
-        echo "See DEPLOYMENT.md for detailed instructions."
-        echo ""
+        echo "⚠️  Note: GitHub Actions free tier has a 6-hour timeout limit."
+        echo "   For 24/7 production, deploy to Railway, Render, Fly.io, or VPS."
+        echo "   See DEPLOYMENT.md for instructions."
         echo "=========================================="
         
     - name: Keep Bot Running
@@ -134,21 +128,18 @@ jobs:
       run: |
         BOT_PID=$(cat bot.pid)
         echo "Monitoring bot (PID: $BOT_PID)..."
-        echo "Workflow will timeout after 6 hours (GitHub Actions free tier limit)"
+        echo "Workflow will timeout after 6 hours"
         
-        # Simple monitoring - check every 5 minutes
-        for i in {1..72}; do  # 72 * 5 minutes = 6 hours
+        # Monitor every 5 minutes for 6 hours
+        for i in {1..72}; do
           if ! ps -p $BOT_PID > /dev/null 2>&1; then
             echo "❌ Bot stopped unexpectedly!"
-            echo "Final logs:"
             tail -50 bot.log
             exit 1
           fi
-          sleep 300  # 5 minutes
+          sleep 300
           echo "[Check $i/72] Bot still running..."
         done
         
         echo "⏱️  Workflow timeout reached (6 hours)"
-        echo "Bot will stop when workflow ends."
-      timeout-minutes: 360  # 6 hours max
-
+      timeout-minutes: 360
