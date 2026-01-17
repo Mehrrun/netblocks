@@ -95,13 +95,13 @@ func main() {
 		bot.Start(ctx)
 	}()
 
-	// Wait for shutdown signal
+	// Wait for shutdown signal - bot runs continuously
 	<-sigChan
 	log.Println("")
 	log.Println("Received shutdown signal, shutting down gracefully...")
 	cancel()
 	
 	// Give goroutines time to clean up
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 	log.Println("Shutdown complete.")
 }

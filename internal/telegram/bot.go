@@ -90,9 +90,6 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 		return
 	}
 	
-	// Wait a moment for bot to be fully initialized
-	time.Sleep(2 * time.Second)
-	
 	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Bot is now monitoring Iranian networks\n📊 Monitoring %d ASNs and %d+ DNS servers\n⏰ Updates will be sent every 10 minutes\n\nBot started at: `%s`",
 		len(b.config.IranASNs),
 		len(b.config.DNSServers),
