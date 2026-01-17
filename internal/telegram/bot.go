@@ -496,7 +496,7 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 
 // SendPeriodicUpdates sends periodic status updates to all subscribed users
 // Uses the interval set via /interval command (default: 10 minutes)
-// Channel updates are sent every 1 minute independently
+// Channel updates are sent every 10 minutes independently
 // The interval can be changed dynamically and will take effect within 1 second
 func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	// Check every second for interval changes and time elapsed
