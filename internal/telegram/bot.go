@@ -107,7 +107,10 @@ func (b *Bot) Start(ctx context.Context) {
 	log.Println("🤖 Starting Telegram bot update handler...")
 	
 	// Delete any pending webhook to ensure we use long polling
-	_, err := b.api.Request(tgbotapi.NewDeleteWebhookConfig())
+	deleteWebhookConfig := tgbotapi.DeleteWebhookConfig{
+		DropPendingUpdates: true,
+	}
+	_, err := b.api.Request(deleteWebhookConfig)
 	if err != nil {
 		log.Printf("⚠️ Warning: Failed to delete webhook (may not exist): %v", err)
 	} else {
