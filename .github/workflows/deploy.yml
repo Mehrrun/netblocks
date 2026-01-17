@@ -39,7 +39,7 @@ jobs:
         
     - name: Create config.json from secrets
       run: |
-        cat > config.json << 'EOF'
+        cat > config.json << EOF
         {
           "telegram_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
           "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
