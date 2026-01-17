@@ -1,0 +1,2 @@
+web: ./netblocks-telegram-bot
+

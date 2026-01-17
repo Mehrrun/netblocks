@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["go_1_21"]
+
+[phases.install]
+cmds = ["go mod download"]
+
+[phases.build]
+cmds = ["go build -o netblocks-telegram-bot ./cmd/telegram-bot"]
+
+[start]
+cmd = "./netblocks-telegram-bot"
+
