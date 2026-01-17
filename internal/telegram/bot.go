@@ -106,11 +106,21 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 func (b *Bot) Start(ctx context.Context) {
 	log.Println("🤖 Starting Telegram bot update handler...")
 	
+	// Delete any pending webhook to ensure we use long polling
+	_, err := b.api.Request(tgbotapi.NewDeleteWebhookConfig())
+	if err != nil {
+		log.Printf("⚠️ Warning: Failed to delete webhook (may not exist): %v", err)
+	} else {
+		log.Println("✅ Cleared any existing webhooks, using long polling")
+	}
+	
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
+	log.Println("📡 Connecting to Telegram API for updates...")
 	updates := b.api.GetUpdatesChan(u)
-	log.Println("✅ Telegram bot update channel initialized, waiting for messages...")
+	log.Println("✅ Telegram bot update channel initialized successfully!")
+	log.Println("⏳ Waiting for incoming messages...")
 
 	for {
 		select {
@@ -132,7 +142,8 @@ func (b *Bot) Start(ctx context.Context) {
 				update.Message.From.UserName,
 				update.Message.Text)
 			
-			b.handleMessage(update.Message)
+			// Handle message in a goroutine to avoid blocking
+			go b.handleMessage(update.Message)
 		}
 	}
 }
