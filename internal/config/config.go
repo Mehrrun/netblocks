@@ -242,6 +242,29 @@ func GetDefaultIranianDNSServers() []DNSServer {
 		{Address: "185.55.230.2", Name: "Shabdiz Telecom DNS (ns2.shabdiz.ir)"},
 
 		// ============================================
+		// ADDITIONAL DATACENTERS & HOSTING - DNS SERVERS
+		// ============================================
+		// Mabna (Satcomco) - mabna.ir
+		{Address: "45.14.135.25", Name: "Mabna DNS (ns1.satcomco.com)"},
+		{Address: "45.14.135.25", Name: "Mabna DNS (ns2.satcomco.com)"},
+
+		// ParsPack (Vandad Vira Hooman LLC) - parspack.ir
+		// Note: Uses CloudNS nameservers
+		{Address: "109.201.133.251", Name: "ParsPack DNS (ns71.cloudns.net)"},
+		{Address: "185.206.180.55", Name: "ParsPack DNS (ns74.cloudns.uk)"},
+		{Address: "178.156.179.118", Name: "ParsPack DNS (ns72.cloudns.com)"},
+		{Address: "51.91.57.244", Name: "ParsPack DNS (ns73.cloudns.net)"},
+
+		// IranServer (Green Web Samaneh Novin PJSC) - iranserver.com
+		// Note: Uses Cloudflare nameservers
+		{Address: "108.162.193.143", Name: "IranServer DNS (sid.ns.cloudflare.com)"},
+		{Address: "173.245.58.184", Name: "IranServer DNS (leia.ns.cloudflare.com)"},
+
+		// Iranian Data Center (KEYANA Information Technology Co. Ltd.) - irandatacenter.ir
+		// Note: DNS servers need to be discovered via domain resolution
+		{Address: "176.62.144.44", Name: "Iranian Data Center DNS (irandatacenter.ir)"},
+
+		// ============================================
 		// CLOUD & CDN PROVIDERS - DNS SERVERS (Nameservers)
 		// ============================================
 		// Arvan Cloud / Abrarvan (Noyan Abr Arvan Co) - arvancdn.ir, arvancloud.ir
@@ -460,10 +483,28 @@ func GetDefaultIranianASNs() []string {
 		// Shabdiz Telecom Network PJSC
 		"AS50530", // Shabdiz Telecom - ISP/telecom
 
+		// ============================================
+		// ADDITIONAL DATACENTERS & HOSTING PROVIDERS
+		// ============================================
+
+		// Mabna (Satcomco)
+		"AS49981", // Mabna - ISP/Datacenter
+
+		// ParsPack (Vandad Vira Hooman LLC)
+		"AS60631", // ParsPack - Hosting services
+
+		// IranServer (Green Web Samaneh Novin PJSC)
+		"AS61173", // IranServer - Datacenter/hosting
+
+		// Iranian Data Center (KEYANA Information Technology Co. Ltd.)
+		"AS57067", // Iranian Data Center - Datacenter services
+
 		// Additional regional ISPs and networks
 		// Note: Many organizations may have additional ASNs for subsidiaries,
 		// regional operations, or specific services that are not publicly well-documented.
 		// This list focuses on active, announced ASNs visible in BGP routing tables.
+		// Note: Tehran Internet Exchange (TIX), ITRC Internet Data Center, HelmaGostar,
+		// AsrTelcom, and Mabna Cloud were not found with publicly routable ASNs or domains.
 	}
 }
 
@@ -525,6 +566,12 @@ func GetASNName(asn string) string {
 		// Academic & Research Networks
 		"AS6736":  "IPM (Institute for Research in Fundamental Sciences)",
 		"AS25306": "IsIran",
+
+		// Additional Datacenters & Hosting Providers
+		"AS49981": "Mabna (Satcomco)",
+		"AS60631": "ParsPack",
+		"AS61173": "IranServer",
+		"AS57067": "Iranian Data Center",
 	}
 
 	if name, exists := asnNames[asn]; exists {

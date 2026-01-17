@@ -150,7 +150,7 @@ DNS monitoring includes:
 
 ## Monitored Iranian ASNs
 
-The tool monitors **36 Iranian ASNs** including:
+The tool monitors **40 Iranian ASNs** including:
 
 ### Mobile Operators
 - **AS197207** - MCCI (Hamrah-e Avval)
@@ -196,6 +196,10 @@ The tool monitors **36 Iranian ASNs** including:
 ### Hosting & Datacenter Providers
 - **AS25124** - Datak
 - **AS205647** - Pardis Fanvari
+- **AS49981** - Mabna (Satcomco)
+- **AS60631** - ParsPack
+- **AS61173** - IranServer
+- **AS57067** - Iranian Data Center
 
 ### Regional & Municipal ISPs
 - **AS56461** - Isfahan Municipality
@@ -245,6 +249,10 @@ The tool monitors **80+ Iranian DNS servers** including:
 ### Datacenter Providers Nameservers
 - **Datak**: ns1-4.datak.ir (81.91.129.230, 81.91.129.229, 81.91.129.226, 81.91.129.227)
 - **Pardis Fanvari**: ns1-2.pardis.ir (185.143.235.1-2)
+- **Mabna**: ns1-2.satcomco.com (45.14.135.25)
+- **ParsPack**: Uses CloudNS nameservers (109.201.133.251, 185.206.180.55, 178.156.179.118, 51.91.57.244)
+- **IranServer**: Uses Cloudflare nameservers (108.162.193.143, 173.245.58.184)
+- **Iranian Data Center**: irandatacenter.ir (176.62.144.44)
 
 ### Academic & Research Networks Nameservers
 - **IPM**: ns1-3.ipm.ir (194.225.62.60-62)
