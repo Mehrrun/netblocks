@@ -59,12 +59,44 @@ jobs:
         python3 -m json.tool config.json > /dev/null || (echo "ERROR: config.json is not valid JSON!" && exit 1)
         echo "✓ Config file is valid JSON"
         
-    - name: Run Telegram Bot
+    - name: Run Telegram Bot (Background)
       run: |
         chmod +x netblocks-telegram-bot
-        echo "Starting NetBlocks Telegram Bot..."
-        ./netblocks-telegram-bot
+        echo "Starting NetBlocks Telegram Bot in background..."
+        
+        # Run bot in background and save PID
+        nohup ./netblocks-telegram-bot > bot.log 2>&1 &
+        echo $! > bot.pid
+        
+        echo "Bot started with PID: $(cat bot.pid)"
+        echo "Waiting 10 seconds for bot to initialize..."
+        sleep 10
+        
+        # Check if bot process is still running
+        if ps -p $(cat bot.pid) > /dev/null; then
+          echo "✓ Bot is running successfully"
+          echo "Bot logs (last 20 lines):"
+          tail -20 bot.log || echo "No logs yet"
+        else
+          echo "✗ Bot process died immediately!"
+          echo "Bot logs:"
+          cat bot.log || echo "No logs available"
+          exit 1
+        fi
+        
+        # Keep workflow alive by tailing logs
+        echo "Bot is running. Monitoring logs..."
+        tail -f bot.log &
+        TAIL_PID=$!
+        
+        # Wait for workflow timeout (GitHub Actions free tier: 6 hours)
+        # This keeps the workflow running and the bot active
+        timeout 21500 tail -f bot.log || true
+        
+        # Cleanup
+        kill $TAIL_PID 2>/dev/null || true
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+      timeout-minutes: 360  # 6 hours (GitHub Actions free tier limit)
 
