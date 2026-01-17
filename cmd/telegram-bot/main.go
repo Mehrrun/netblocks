@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 )
 
 func main() {
+	startTime := time.Now()
 	configPath := flag.String("config", "config.json", "Path to configuration file")
 	flag.Parse()
 
@@ -67,53 +70,149 @@ func main() {
 		log.Fatalf("Failed to create Telegram bot: %v", err)
 	}
 
-	// Start monitor
-	go mon.Start(ctx)
-	log.Println("✅ Monitor started")
+	// Error channels for goroutine error reporting
+	monitorErrChan := make(chan error, 1)
+	botErrChan := make(chan error, 1)
+	updatesErrChan := make(chan error, 1)
 
-	// Start bot (this blocks, so run in goroutine)
+	// Use WaitGroup to track goroutines
+	var wg sync.WaitGroup
+
+	// Start monitor with panic recovery
+	wg.Add(1)
 	go func() {
-		log.Println("🚀 Starting Telegram bot...")
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ PANIC in monitor goroutine: %v", r)
+				monitorErrChan <- fmt.Errorf("panic in monitor: %v", r)
+			}
+		}()
+		log.Println("✅ Starting monitor goroutine...")
+		mon.Start(ctx)
+		log.Println("⚠️ Monitor goroutine stopped")
+	}()
+
+	// Start bot with panic recovery
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ PANIC in bot goroutine: %v", r)
+				botErrChan <- fmt.Errorf("panic in bot: %v", r)
+			}
+		}()
+		log.Println("🚀 Starting Telegram bot goroutine...")
 		bot.Start(ctx)
-		log.Println("⚠️ Bot stopped!")
+		log.Println("⚠️ Bot goroutine stopped")
 	}()
 
-	// Start periodic updates
+	// Start periodic updates with panic recovery
+	wg.Add(1)
 	go func() {
-		log.Println("🔄 Starting periodic updates...")
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ PANIC in periodic updates goroutine: %v", r)
+				updatesErrChan <- fmt.Errorf("panic in periodic updates: %v", r)
+			}
+		}()
+		log.Println("🔄 Starting periodic updates goroutine...")
 		bot.SendPeriodicUpdates(ctx)
-		log.Println("⚠️ Periodic updates stopped!")
+		log.Println("⚠️ Periodic updates goroutine stopped")
 	}()
 
-	// Give bot time to initialize
-	time.Sleep(3 * time.Second)
+	// Give components time to initialize
+	log.Println("⏳ Waiting for components to initialize...")
+	time.Sleep(5 * time.Second)
 
+	// Startup verification
+	log.Println("")
 	log.Println("✅ NetBlocks Telegram Bot started successfully!")
-	log.Println("📊 Monitoring Iranian ASNs and DNS servers...")
+	log.Printf("📊 Monitoring %d ASNs and %d+ DNS servers", len(cfg.IranASNs), len(cfg.DNSServers))
 	log.Println("🤖 Bot is ready to receive commands")
+	log.Printf("🆔 Process ID: %d", os.Getpid())
 	if cfg.TelegramChannel != "" {
 		log.Printf("📢 Channel updates enabled for: %s", cfg.TelegramChannel)
 		log.Println("   Channel will receive updates every 10 minutes")
 		
 		// Send immediate startup message to channel
-		go bot.SendStartupMessage(ctx)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("❌ PANIC in startup message: %v", r)
+				}
+			}()
+			bot.SendStartupMessage(ctx)
+		}()
 	}
 	log.Println("")
 	log.Println("🔄 Bot is running continuously...")
 	log.Println("✅ OK - Bot is running in background")
+	log.Println("")
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
-	// Keep the main process alive - block on signal channel
-	// This keeps the process running in the background
-	<-sigChan
-	log.Printf("Received shutdown signal")
-	log.Println("Shutting down gracefully...")
-	cancel()
-	// Give goroutines time to clean up
-	time.Sleep(2 * time.Second)
-	log.Println("Shutdown complete.")
+	// Heartbeat ticker - logs every 5 minutes to show process is alive
+	heartbeat := time.NewTicker(5 * time.Minute)
+	defer heartbeat.Stop()
+
+	// Main loop with heartbeat and error monitoring
+	log.Println("💓 Heartbeat started - process will log status every 5 minutes")
+	for {
+		select {
+		case sig := <-sigChan:
+			log.Printf("📥 Received shutdown signal: %v", sig)
+			log.Println("🛑 Shutting down gracefully...")
+			
+			// Cancel context to signal all goroutines to stop
+			cancel()
+			
+			// Wait for goroutines to finish (with timeout)
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+			
+			select {
+			case <-done:
+				log.Println("✅ All goroutines stopped cleanly")
+			case <-time.After(10 * time.Second):
+				log.Println("⚠️ Timeout waiting for goroutines to stop")
+			}
+			
+			log.Println("✅ Shutdown complete.")
+			return
+			
+		case <-ctx.Done():
+			log.Println("🛑 Context cancelled, shutting down...")
+			wg.Wait()
+			log.Println("✅ Shutdown complete.")
+			return
+			
+		case err := <-monitorErrChan:
+			log.Printf("⚠️ Error in monitor goroutine: %v", err)
+			// Don't exit, just log the error
+			
+		case err := <-botErrChan:
+			log.Printf("⚠️ Error in bot goroutine: %v", err)
+			// Don't exit, just log the error
+			
+		case err := <-updatesErrChan:
+			log.Printf("⚠️ Error in periodic updates goroutine: %v", err)
+			// Don't exit, just log the error
+			
+		case <-heartbeat.C:
+			// Periodic heartbeat to show process is alive
+			uptime := time.Since(startTime)
+			log.Printf("💓 Bot heartbeat - still running (PID: %d, Uptime: %s)", 
+				os.Getpid(), uptime.Round(time.Second))
+			log.Printf("📊 Status: Context active=%t", ctx.Err() == nil)
+		}
+	}
 }
 
