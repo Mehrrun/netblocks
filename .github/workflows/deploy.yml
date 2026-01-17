@@ -37,21 +37,10 @@ jobs:
           echo "Error: TELEGRAM_BOT_TOKEN secret not set"
           exit 1
         fi
+        if [ -z "${{ secrets.TELEGRAM_CHANNEL }}" ]; then
+          echo "Warning: TELEGRAM_CHANNEL secret not set"
+        fi
         echo "✓ Secrets verified"
-      
-    - name: Create config.json
-      run: |
-        cat > config.json << EOF
-        {
-          "telegram_bot_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
-          "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
-          "interval": "10m"
-        }
-        EOF
-        echo "✓ Config file created"
-        
-    - name: Validate JSON
-      run: python3 -m json.tool config.json > /dev/null && echo "✓ JSON valid"
       
     - name: Build bot
       run: |
@@ -60,11 +49,15 @@ jobs:
         echo "✓ Bot built successfully"
       
     - name: Start bot in background
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
       run: |
         nohup ./netblocks-telegram-bot > bot.log 2>&1 &
         BOT_PID=$!
         echo $BOT_PID > bot.pid
         echo "✓ Bot started with PID: $BOT_PID"
+        echo "✓ Environment variables set"
         
     - name: Wait for initialization
       run: sleep 5
