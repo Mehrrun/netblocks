@@ -344,6 +344,11 @@ func GetDefaultIranianDNSServers() []DNSServer {
 func GetDefaultIranianASNs() []string {
 	return []string{
 		// ============================================
+		// TIC (Telecommunication Infrastructure Company) - tic.ir
+		// ============================================
+		"AS12880", // TIC (tic.ir) - Telecommunication Infrastructure Company
+
+		// ============================================
 		// MOBILE OPERATORS - All ASNs
 		// ============================================
 
@@ -363,9 +368,6 @@ func GetDefaultIranianASNs() []string {
 
 		// Iran Telecommunication Company PJS (TCI)
 		"AS58224", // TCI - Main backbone/ISP
-
-		// Information Technology Company (ITC)
-		"AS12880", // ITC - Main ISP/hosting
 
 		// Telecommunication Infrastructure Company (TIC)
 		"AS49666", // TIC - Infrastructure backbone
@@ -517,9 +519,11 @@ func GetASNName(asn string) string {
 		"AS57218":  "Rightel",
 		"AS62140":  "Rightel Data Center",
 
+		// TIC (Telecommunication Infrastructure Company) - tic.ir
+		"AS12880": "TIC (tic.ir)",
+
 		// TCI/ITC Group
 		"AS58224": "TCI (Iran Telecommunication Company)",
-		"AS12880": "ITC (Information Technology Company)",
 		"AS49666": "TIC (Telecommunication Infrastructure Company)",
 
 		// Shatel Group
