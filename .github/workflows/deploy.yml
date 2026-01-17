@@ -25,9 +25,21 @@ jobs:
       run: |
         go build -o netblocks-telegram-bot ./cmd/telegram-bot
         
+    - name: Verify secrets are set
+      run: |
+        if [ -z "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+          echo "ERROR: TELEGRAM_BOT_TOKEN secret is not set!"
+          exit 1
+        fi
+        if [ -z "${{ secrets.TELEGRAM_CHANNEL }}" ]; then
+          echo "ERROR: TELEGRAM_CHANNEL secret is not set!"
+          exit 1
+        fi
+        echo "✓ Secrets are configured"
+        
     - name: Create config.json from secrets
       run: |
-        cat > config.json << EOF
+        cat > config.json << 'EOF'
         {
           "telegram_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
           "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
@@ -37,10 +49,20 @@ jobs:
           "iran_asns": []
         }
         EOF
+        echo "✓ Config file created"
+        # Verify config.json exists and is valid JSON
+        if [ ! -f config.json ]; then
+          echo "ERROR: config.json was not created!"
+          exit 1
+        fi
+        # Check if JSON is valid (basic check)
+        python3 -m json.tool config.json > /dev/null || (echo "ERROR: config.json is not valid JSON!" && exit 1)
+        echo "✓ Config file is valid JSON"
         
     - name: Run Telegram Bot
       run: |
         chmod +x netblocks-telegram-bot
+        echo "Starting NetBlocks Telegram Bot..."
         ./netblocks-telegram-bot
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
