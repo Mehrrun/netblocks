@@ -51,3 +51,6 @@ temp/
 Thumbs.db
 .DS_Store
 
+# Systemd service files (for local testing)
+*.service
+

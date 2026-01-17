@@ -41,27 +41,6 @@ jobs:
         fi
         echo "✓ Secrets are configured"
         
-    - name: Create config.json from secrets
-      run: |
-        echo "Creating config.json..."
-        cat > config.json << EOF
-        {
-          "telegram_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
-          "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
-          "interval": "10m",
-          "ris_live_url": "wss://ris-live.ripe.net/v1/ws/?client=netblocks",
-          "dns_servers": [],
-          "iran_asns": []
-        }
-        EOF
-        echo "✓ Config file created"
-        if [ ! -f config.json ]; then
-          echo "ERROR: config.json was not created!"
-          exit 1
-        fi
-        python3 -m json.tool config.json > /dev/null || (echo "ERROR: config.json is not valid JSON!" && exit 1)
-        echo "✓ Config file is valid JSON"
-        
     - name: Verify Bot Binary
       run: |
         echo "Verifying bot binary..."
@@ -73,14 +52,92 @@ jobs:
         echo "✅ Binary is ready"
         file netblocks-telegram-bot
         
-    - name: Start Telegram Bot
+    - name: Setup systemd service
       run: |
-        echo "🚀 Starting NetBlocks Telegram Bot..."
-        echo "Bot will run in foreground to keep process alive"
+        echo "Setting up systemd service for bot..."
+        
+        # Create systemd service file with environment variables
+        sudo tee /etc/systemd/system/netblocks-bot.service > /dev/null <<EOF
+        [Unit]
+        Description=NetBlocks Telegram Bot - Iranian Network Monitoring
+        After=network.target
+
+        [Service]
+        Type=simple
+        WorkingDirectory=$(pwd)
+        Environment="TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        Environment="TELEGRAM_CHANNEL=${{ secrets.TELEGRAM_CHANNEL }}"
+        ExecStart=$(pwd)/netblocks-telegram-bot
+        Restart=always
+        RestartSec=10
+        StandardOutput=journal
+        StandardError=journal
+        SyslogIdentifier=netblocks-bot
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        
+        # Reload systemd
+        sudo systemctl daemon-reload
+        echo "✓ Systemd service configured"
+        
+    - name: Start bot as systemd daemon
+      run: |
+        echo "Starting NetBlocks bot as systemd service..."
+        
+        # Start and enable the service
+        sudo systemctl start netblocks-bot
+        sudo systemctl enable netblocks-bot
+        
+        # Wait a moment for service to initialize
+        sleep 3
+        
+        # Check service status
+        sudo systemctl status netblocks-bot --no-pager
+        
+        echo ""
+        echo "✓ Bot started as daemon"
+        
+    - name: Monitor bot daemon
+      run: |
+        echo "Bot is running as systemd daemon"
+        echo "Monitoring logs..."
         echo ""
         
-        # Run bot in foreground - this keeps the workflow and bot running
-        ./netblocks-telegram-bot
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+        # Show initial logs
+        sudo journalctl -u netblocks-bot -n 50 --no-pager
+        
+        echo ""
+        echo "Keeping workflow alive to maintain daemon..."
+        echo "Status checks will run every 5 minutes"
+        echo ""
+        
+        # Keep workflow running and periodically show logs
+        while true; do
+          sleep 300  # Wait 5 minutes
+          echo ""
+          echo "=== Bot Status Check ($(date)) ==="
+          sudo systemctl is-active netblocks-bot || (
+            echo "❌ Bot stopped! Showing recent logs:"
+            sudo journalctl -u netblocks-bot -n 100 --no-pager
+            exit 1
+          )
+          echo "✅ Bot is running"
+          echo "Recent logs:"
+          sudo journalctl -u netblocks-bot -n 20 --no-pager --since "5 minutes ago"
+        done
+        
+    - name: Service debugging info (on failure)
+      if: failure()
+      run: |
+        echo "Service failed! Debugging information:"
+        echo ""
+        echo "=== Service Status ==="
+        sudo systemctl status netblocks-bot --no-pager --full
+        echo ""
+        echo "=== Recent Logs ==="
+        sudo journalctl -u netblocks-bot -n 100 --no-pager
+        echo ""
+        echo "=== Service File ==="
+        cat /etc/systemd/system/netblocks-bot.service

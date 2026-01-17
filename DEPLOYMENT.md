@@ -1,26 +1,82 @@
 # Deployment Guide
 
-## Current Deployment: GitHub Actions
+## Current Deployment: GitHub Actions with systemd Daemon
 
-The bot is currently configured to run on GitHub Actions. However, **GitHub Actions is not ideal for long-running services** due to:
-
-- ⏱️ **6-hour timeout limit** on free tier
-- 💰 **Usage limits** on free tier
-- 🔄 **Workflow cancellation** when repository is inactive
+The bot runs as a **systemd service** on GitHub Actions runners, providing proper daemon functionality with automatic restarts and service management.
 
 ### How It Works
 
 1. The workflow builds the bot binary
-2. Runs the bot in the background using `nohup`
-3. Verifies the bot started successfully
-4. Keeps the workflow alive to maintain the bot service
-5. Monitors bot health every 60 seconds
+2. Creates a systemd service file with environment variables
+3. Starts the bot as a systemd daemon
+4. Monitors the service status every 5 minutes
+5. Automatically restarts the bot if it crashes
+6. Logs to systemd journal (accessible via `journalctl`)
+
+### Advantages
+
+- ✅ **Proper Daemon**: Bot runs as a true system service
+- ✅ **Auto-Restart**: Automatically restarts on crashes (RestartSec=10)
+- ✅ **Log Management**: Structured logs via journalctl
+- ✅ **Service Control**: Standard systemctl commands
+- ✅ **Status Monitoring**: Periodic health checks every 5 minutes
+- ✅ **Environment Variables**: Securely passed from GitHub secrets
 
 ### Limitations
 
-- The workflow will timeout after 6 hours
-- If the workflow is cancelled, the bot stops
-- Not suitable for 24/7 production use
+- ⏱️ **6-hour timeout limit** on GitHub Actions free tier
+- 💰 **Usage limits** on free tier
+- 🔄 **Workflow cancellation** stops the daemon when repository is inactive
+
+### Monitoring
+
+Check bot status on GitHub Actions:
+
+1. Go to Actions tab in GitHub repository
+2. View the latest "Build and Deploy NetBlocks Bot" workflow
+3. Check the "Monitor bot daemon" step for logs
+4. Status checks run every 5 minutes showing bot health
+
+View logs from workflow:
+```bash
+# The workflow automatically shows:
+# - Initial 50 lines of logs
+# - Status check every 5 minutes
+# - Recent 20 lines from last 5 minutes
+```
+
+### Local Testing with systemd
+
+You can test the systemd service locally before deploying:
+
+```bash
+# 1. Build the bot
+go build -o netblocks-telegram-bot ./cmd/telegram-bot
+
+# 2. Edit the service file with your paths
+nano netblocks-bot.service
+# Update WorkingDirectory and ExecStart paths
+# Add your TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL
+
+# 3. Install service
+sudo cp netblocks-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# 4. Start service
+sudo systemctl start netblocks-bot
+
+# 5. Check status
+sudo systemctl status netblocks-bot
+
+# 6. View logs
+sudo journalctl -u netblocks-bot -f
+
+# 7. Stop service
+sudo systemctl stop netblocks-bot
+
+# 8. Restart service
+sudo systemctl restart netblocks-bot
+```
 
 ## Recommended Production Deployment Options
 
@@ -130,7 +186,10 @@ Or create a `config.json` file with:
 
 Check bot status:
 
-- **GitHub Actions**: View workflow logs in Actions tab
+- **GitHub Actions (systemd)**: 
+  - View workflow logs in Actions tab
+  - Status checks every 5 minutes
+  - `sudo journalctl -u netblocks-bot` (in workflow)
 - **Railway/Render**: View logs in dashboard
 - **Fly.io**: `fly logs`
 - **VPS**: `sudo systemctl status netblocks-bot` or `journalctl -u netblocks-bot -f`
@@ -151,8 +210,28 @@ Check bot status:
 3. Check system resources (memory, CPU)
 4. Ensure no rate limiting from Telegram API
 
+### systemd Service Issues (GitHub Actions)
+
+1. **Service fails to start**:
+   ```bash
+   # Check service status in workflow logs
+   sudo systemctl status netblocks-bot --no-pager --full
+   sudo journalctl -u netblocks-bot -n 100 --no-pager
+   ```
+
+2. **Bot crashes and doesn't restart**:
+   - Check RestartSec setting in service file
+   - Verify Restart=always is set
+   - Check for fatal errors in logs
+
+3. **Environment variables not working**:
+   - Verify secrets are set in GitHub repository
+   - Check service file shows correct environment variables
+   - View with: `cat /etc/systemd/system/netblocks-bot.service`
+
 ### GitHub Actions Timeout
 
-- This is expected after 6 hours
+- This is expected after 6 hours on free tier
 - Use one of the production deployment options above for 24/7 operation
+- Or upgrade to GitHub Actions Pro for longer runs
 
