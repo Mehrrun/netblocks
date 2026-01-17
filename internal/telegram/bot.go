@@ -506,7 +506,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	lastUpdateTime := time.Now()
 	lastChannelUpdateTime := time.Time{} // Start with zero time so channel gets immediate update
 	lastInterval := b.getUpdateInterval()
-	channelInterval := 1 * time.Minute // Channel updates every 1 minute
+	channelInterval := 10 * time.Minute // Channel updates every 10 minutes
 	
 	log.Printf("Periodic updates started - will send to subscribed users every %v", lastInterval)
 	if b.channelID != "" {
