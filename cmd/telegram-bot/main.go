@@ -123,9 +123,10 @@ func main() {
 		log.Println("⚠️ Periodic updates goroutine stopped")
 	}()
 
-	// Give components time to initialize
-	log.Println("⏳ Waiting for components to initialize...")
-	time.Sleep(5 * time.Second)
+	// Give components time to initialize (2 minutes for full deployment initialization)
+	log.Println("⏳ Waiting for components to initialize (this may take up to 2 minutes)...")
+	time.Sleep(2 * time.Minute)
+	log.Println("✅ Initialization wait period complete")
 
 	// Startup verification
 	log.Println("")
@@ -137,7 +138,8 @@ func main() {
 		log.Printf("📢 Channel updates enabled for: %s", cfg.TelegramChannel)
 		log.Println("   Channel will receive updates every 10 minutes")
 		
-		// Send immediate startup message to channel
+		// Send startup message to channel after initialization wait
+		log.Println("📤 Sending startup message to channel...")
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
