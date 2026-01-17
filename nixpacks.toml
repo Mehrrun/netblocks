@@ -10,3 +10,6 @@ cmds = ["go build -o netblocks-telegram-bot ./cmd/telegram-bot"]
 [start]
 cmd = "./netblocks-telegram-bot"
 
+[providers]
+railway = true
+
