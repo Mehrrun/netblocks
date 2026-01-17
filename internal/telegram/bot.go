@@ -569,8 +569,7 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	// Wait a few seconds for monitoring to initialize and collect initial data
 	log.Println("⏳ Waiting for initial monitoring data collection...")
-	time.Sleep(5 * time.Second)
-	
+	// Start immediately - monitoring data is already collected from PerformInitialCheck
 	// Check every second for interval changes and time elapsed
 	checkTicker := time.NewTicker(1 * time.Second)
 	defer checkTicker.Stop()
