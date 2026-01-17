@@ -83,8 +83,8 @@ jobs:
         echo $BOT_PID > bot.pid
         
         echo "Bot started with PID: $BOT_PID"
-        echo "Waiting 20 seconds for bot to initialize..."
-        sleep 20
+        echo "Waiting 3 seconds for bot to initialize..."
+        sleep 3
         
         # Check if bot process is still running
         if ps -p $BOT_PID > /dev/null 2>&1; then
