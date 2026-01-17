@@ -1,0 +1,8 @@
+{
+  "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN_HERE",
+  "telegram_channel": "YourChannelUsername",
+  "interval": "10m",
+  "ris_live_url": "wss://ris-live.ripe.net/v1/ws/?client=netblocks",
+  "dns_servers": [],
+  "iran_asns": []
+}

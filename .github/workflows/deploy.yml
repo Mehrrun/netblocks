@@ -1,0 +1,48 @@
+name: Build and Deploy NetBlocks Bot
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        
+    - name: Download dependencies
+      run: go mod download
+      
+    - name: Build Telegram Bot
+      run: |
+        go build -o netblocks-telegram-bot ./cmd/telegram-bot
+        
+    - name: Create config.json from secrets
+      run: |
+        cat > config.json << EOF
+        {
+          "telegram_token": "${{ secrets.TELEGRAM_BOT_TOKEN }}",
+          "telegram_channel": "${{ secrets.TELEGRAM_CHANNEL }}",
+          "interval": "10m",
+          "ris_live_url": "wss://ris-live.ripe.net/v1/ws/?client=netblocks",
+          "dns_servers": [],
+          "iran_asns": []
+        }
+        EOF
+        
+    - name: Run Telegram Bot
+      run: |
+        chmod +x netblocks-telegram-bot
+        ./netblocks-telegram-bot
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+
