@@ -12,6 +12,9 @@ on:
       - '.trigger'
   workflow_dispatch:
 
+permissions:
+  contents: write  # Allow workflow to push .trigger file
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
@@ -68,13 +71,22 @@ jobs:
       
     - name: Verify bot is running
       run: |
-        if kill -0 $(cat bot.pid) 2>/dev/null; then
-          echo "✓ Bot is running"
-          echo "Recent logs:"
-          tail -20 bot.log
+        if [ -f bot.pid ]; then
+          BOT_PID=$(cat bot.pid)
+          if kill -0 $BOT_PID 2>/dev/null; then
+            echo "✓ Bot is running with PID: $BOT_PID"
+            echo ""
+            echo "Recent logs:"
+            tail -20 bot.log
+          else
+            echo "✗ Bot process not found"
+            echo ""
+            echo "Full logs:"
+            cat bot.log
+            exit 1
+          fi
         else
-          echo "✗ Bot failed to start"
-          cat bot.log
+          echo "✗ bot.pid file not found"
           exit 1
         fi
     
