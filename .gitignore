@@ -54,3 +54,6 @@ Thumbs.db
 # Systemd service files (for local testing)
 *.service
 
+# Fly.io
+.fly/
+

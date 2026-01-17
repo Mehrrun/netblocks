@@ -1,237 +1,193 @@
 # Deployment Guide
 
-## Current Deployment: GitHub Actions with systemd Daemon
+## Current Deployment: Fly.io (Recommended)
 
-The bot runs as a **systemd service** on GitHub Actions runners, providing proper daemon functionality with automatic restarts and service management.
+The bot is deployed to **Fly.io** for 24/7 operation. GitHub Actions handles automatic deployment when you push to the main branch.
 
 ### How It Works
 
-1. The workflow builds the bot binary
-2. Creates a systemd service file with environment variables
-3. Starts the bot as a systemd daemon
-4. Monitors the service status every 5 minutes
-5. Automatically restarts the bot if it crashes
-6. Logs to systemd journal (accessible via `journalctl`)
+1. Push code to GitHub (main branch)
+2. GitHub Actions builds the Docker image
+3. Deploys to Fly.io automatically
+4. Bot runs continuously on Fly.io (never stops)
+5. Auto-restarts if it crashes
+
+### Initial Setup (One-time)
+
+1. **Install Fly CLI locally**:
+   ```bash
+   curl -L https://fly.io/install.sh | sh
+   ```
+
+2. **Login to Fly.io**:
+   ```bash
+   fly auth login
+   ```
+
+3. **Create the app** (first time only):
+   ```bash
+   fly launch --no-deploy
+   # Choose app name: netblocks-bot
+   # Choose region: Amsterdam (ams) or closest to you
+   ```
+
+4. **Set secrets on Fly.io**:
+   ```bash
+   fly secrets set TELEGRAM_BOT_TOKEN=your_token_here
+   fly secrets set TELEGRAM_CHANNEL=IranBlackoutMonitor
+   ```
+
+5. **Get Fly API token for GitHub Actions**:
+   ```bash
+   fly tokens create deploy
+   ```
+   Copy the token, then add it to GitHub:
+   - Go to your repo → Settings → Secrets and variables → Actions
+   - Add secret: `FLY_API_TOKEN` = (paste the token)
+
+6. **Deploy**:
+   ```bash
+   git push origin main
+   ```
+   GitHub Actions will automatically deploy to Fly.io!
+
+### Managing the Bot
+
+**View status**:
+```bash
+fly status --app netblocks-bot
+```
+
+**View logs**:
+```bash
+fly logs --app netblocks-bot
+```
+
+**Restart bot**:
+```bash
+fly apps restart netblocks-bot
+```
+
+**Scale resources** (if needed):
+```bash
+fly scale memory 512 --app netblocks-bot
+```
+
+**SSH into the machine**:
+```bash
+fly ssh console --app netblocks-bot
+```
 
 ### Advantages
 
-- ✅ **Proper Daemon**: Bot runs as a true system service
-- ✅ **Auto-Restart**: Automatically restarts on crashes (RestartSec=10)
-- ✅ **Log Management**: Structured logs via journalctl
-- ✅ **Service Control**: Standard systemctl commands
-- ✅ **Status Monitoring**: Periodic health checks every 5 minutes
-- ✅ **Environment Variables**: Securely passed from GitHub secrets
+- ✅ **24/7 Uptime**: Runs continuously, no timeouts
+- ✅ **Auto-Deploy**: Push to GitHub = automatic deployment
+- ✅ **Auto-Restart**: Crashes are automatically recovered
+- ✅ **Free Tier**: Sufficient for this bot
+- ✅ **Global CDN**: Fast worldwide
+- ✅ **Easy Logs**: `fly logs` command
 
-### Limitations
+### Cost
 
-- ⏱️ **6-hour timeout limit** on GitHub Actions free tier
-- 💰 **Usage limits** on free tier
-- 🔄 **Workflow cancellation** stops the daemon when repository is inactive
+**Free tier includes**:
+- Up to 3 shared-cpu-1x VMs
+- 256MB RAM per VM
+- 160GB outbound data transfer
 
-### Monitoring
+This bot uses minimal resources and fits comfortably in the free tier.
 
-Check bot status on GitHub Actions:
+## Alternative: GitHub Actions with systemd (Development Only)
 
-1. Go to Actions tab in GitHub repository
-2. View the latest "Build and Deploy NetBlocks Bot" workflow
-3. Check the "Monitor bot daemon" step for logs
-4. Status checks run every 5 minutes showing bot health
+For testing purposes, you can run with systemd on GitHub Actions, but it will timeout after 6 hours.
 
-View logs from workflow:
+See the `netblocks-bot.service` file for systemd configuration.
+
+## Local Development
+
+**Run locally**:
 ```bash
-# The workflow automatically shows:
-# - Initial 50 lines of logs
-# - Status check every 5 minutes
-# - Recent 20 lines from last 5 minutes
-```
+# Set environment variables
+export TELEGRAM_BOT_TOKEN=your_token
+export TELEGRAM_CHANNEL=your_channel
 
-### Local Testing with systemd
-
-You can test the systemd service locally before deploying:
-
-```bash
-# 1. Build the bot
+# Build and run
 go build -o netblocks-telegram-bot ./cmd/telegram-bot
-
-# 2. Edit the service file with your paths
-nano netblocks-bot.service
-# Update WorkingDirectory and ExecStart paths
-# Add your TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL
-
-# 3. Install service
-sudo cp netblocks-bot.service /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# 4. Start service
-sudo systemctl start netblocks-bot
-
-# 5. Check status
-sudo systemctl status netblocks-bot
-
-# 6. View logs
-sudo journalctl -u netblocks-bot -f
-
-# 7. Stop service
-sudo systemctl stop netblocks-bot
-
-# 8. Restart service
-sudo systemctl restart netblocks-bot
+./netblocks-telegram-bot
 ```
 
-## Recommended Production Deployment Options
+**Run with Docker**:
+```bash
+# Build image
+docker build -t netblocks-bot .
 
-### Option 1: Railway.app (Recommended)
-
-Railway is perfect for long-running services:
-
-1. **Sign up**: https://railway.app
-2. **Connect GitHub**: Link your repository
-3. **Deploy**: Railway auto-detects Go projects
-4. **Set Environment Variables**:
-   - `TELEGRAM_BOT_TOKEN`: Your bot token
-   - `TELEGRAM_CHANNEL`: Your channel username
-5. **Deploy**: Railway will build and run automatically
-
-**Cost**: Free tier available, then pay-as-you-go
-
-### Option 2: Render.com
-
-1. **Sign up**: https://render.com
-2. **New Web Service**: Connect GitHub repo
-3. **Build Command**: `go build -o netblocks-telegram-bot ./cmd/telegram-bot`
-4. **Start Command**: `./netblocks-telegram-bot`
-5. **Environment Variables**: Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL`
-
-**Cost**: Free tier available
-
-### Option 3: Fly.io
-
-1. **Install Fly CLI**: `curl -L https://fly.io/install.sh | sh`
-2. **Login**: `fly auth login`
-3. **Launch**: `fly launch` (in project directory)
-4. **Set Secrets**: 
-   ```bash
-   fly secrets set TELEGRAM_BOT_TOKEN=your_token
-   fly secrets set TELEGRAM_CHANNEL=your_channel
-   ```
-5. **Deploy**: `fly deploy`
-
-**Cost**: Free tier available
-
-### Option 4: VPS (DigitalOcean, Linode, etc.)
-
-For full control:
-
-1. **Create VPS**: Ubuntu 22.04 LTS
-2. **Install Go**: 
-   ```bash
-   wget https://go.dev/dl/go1.21.linux-amd64.tar.gz
-   sudo tar -C /usr/local -xzf go1.21.linux-amd64.tar.gz
-   export PATH=$PATH:/usr/local/go/bin
-   ```
-3. **Clone Repository**:
-   ```bash
-   git clone https://github.com/mehrrun/netblocks.git
-   cd netblocks
-   ```
-4. **Build**:
-   ```bash
-   go build -o netblocks-telegram-bot ./cmd/telegram-bot
-   ```
-5. **Create systemd Service** (`/etc/systemd/system/netblocks-bot.service`):
-   ```ini
-   [Unit]
-   Description=NetBlocks Telegram Bot
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=your-user
-   WorkingDirectory=/path/to/netblocks
-   Environment="TELEGRAM_BOT_TOKEN=your_token"
-   Environment="TELEGRAM_CHANNEL=your_channel"
-   ExecStart=/path/to/netblocks/netblocks-telegram-bot
-   Restart=always
-   RestartSec=10
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-6. **Enable and Start**:
-   ```bash
-   sudo systemctl enable netblocks-bot
-   sudo systemctl start netblocks-bot
-   sudo systemctl status netblocks-bot
-   ```
-
-**Cost**: $5-10/month for basic VPS
-
-## Environment Variables
-
-All deployment methods require these environment variables:
-
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
-- `TELEGRAM_CHANNEL`: Your Telegram channel username (e.g., `IranBlackoutMonitor`)
-
-Or create a `config.json` file with:
-```json
-{
-  "telegram_token": "your_token",
-  "telegram_channel": "your_channel",
-  "interval": "10m"
-}
+# Run container
+docker run -e TELEGRAM_BOT_TOKEN=your_token \
+           -e TELEGRAM_CHANNEL=your_channel \
+           netblocks-bot
 ```
 
 ## Monitoring
 
-Check bot status:
+**Fly.io Dashboard**: https://fly.io/dashboard
+- View app status
+- Check metrics (CPU, memory, network)
+- View deployment history
 
-- **GitHub Actions (systemd)**: 
-  - View workflow logs in Actions tab
-  - Status checks every 5 minutes
-  - `sudo journalctl -u netblocks-bot` (in workflow)
-- **Railway/Render**: View logs in dashboard
-- **Fly.io**: `fly logs`
-- **VPS**: `sudo systemctl status netblocks-bot` or `journalctl -u netblocks-bot -f`
+**Telegram**: 
+- Send `/status` to your bot
+- Bot sends updates to your channel every 10 minutes
+
+**Logs**:
+```bash
+# Follow logs in real-time
+fly logs --app netblocks-bot
+
+# Show last 100 lines
+fly logs --app netblocks-bot -n 100
+```
 
 ## Troubleshooting
 
-### Bot Not Starting
+**Bot not responding**:
+```bash
+# Check if app is running
+fly status --app netblocks-bot
 
-1. Check logs for errors
-2. Verify environment variables are set
-3. Ensure bot token is valid
-4. Check network connectivity
+# View recent logs
+fly logs --app netblocks-bot
 
-### Bot Stops Unexpectedly
+# Restart if needed
+fly apps restart netblocks-bot
+```
 
-1. Check logs for error messages
-2. Verify bot has proper permissions
-3. Check system resources (memory, CPU)
-4. Ensure no rate limiting from Telegram API
+**Deployment fails**:
+```bash
+# Check deployment logs in GitHub Actions
+# Or deploy manually:
+fly deploy
+```
 
-### systemd Service Issues (GitHub Actions)
+**Update secrets**:
+```bash
+fly secrets set TELEGRAM_BOT_TOKEN=new_token --app netblocks-bot
+```
 
-1. **Service fails to start**:
-   ```bash
-   # Check service status in workflow logs
-   sudo systemctl status netblocks-bot --no-pager --full
-   sudo journalctl -u netblocks-bot -n 100 --no-pager
-   ```
+**View all secrets** (names only, not values):
+```bash
+fly secrets list --app netblocks-bot
+```
 
-2. **Bot crashes and doesn't restart**:
-   - Check RestartSec setting in service file
-   - Verify Restart=always is set
-   - Check for fatal errors in logs
+## Production Checklist
 
-3. **Environment variables not working**:
-   - Verify secrets are set in GitHub repository
-   - Check service file shows correct environment variables
-   - View with: `cat /etc/systemd/system/netblocks-bot.service`
+- ✅ Fly.io app created
+- ✅ Secrets set (TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL)
+- ✅ FLY_API_TOKEN added to GitHub secrets
+- ✅ GitHub Actions workflow configured
+- ✅ Bot deployed and running
+- ✅ Bot responding to Telegram commands
+- ✅ Channel receiving updates
 
-### GitHub Actions Timeout
+## Support
 
-- This is expected after 6 hours on free tier
-- Use one of the production deployment options above for 24/7 operation
-- Or upgrade to GitHub Actions Pro for longer runs
-
+- Fly.io Docs: https://fly.io/docs/
+- Fly.io Community: https://community.fly.io/
