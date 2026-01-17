@@ -517,6 +517,10 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 // Channel updates are sent every 10 minutes independently
 // The interval can be changed dynamically and will take effect within 1 second
 func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
+	// Wait a few seconds for monitoring to initialize and collect initial data
+	log.Println("⏳ Waiting for initial monitoring data collection...")
+	time.Sleep(5 * time.Second)
+	
 	// Check every second for interval changes and time elapsed
 	checkTicker := time.NewTicker(1 * time.Second)
 	defer checkTicker.Stop()
@@ -529,7 +533,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	log.Printf("Periodic updates started - will send to subscribed users every %v", lastInterval)
 	if b.channelID != "" {
 		log.Printf("✅ Channel updates will be sent every %v to: %s", channelInterval, b.channelID)
-		log.Printf("📋 Channel will receive first update immediately")
+		log.Printf("📋 Channel will receive first status update after monitoring data is ready")
 	} else {
 		log.Printf("⚠️  No channel configured - skipping channel updates")
 	}
