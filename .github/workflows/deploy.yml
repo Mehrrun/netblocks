@@ -123,23 +123,34 @@ jobs:
         echo "   See DEPLOYMENT.md for instructions."
         echo "=========================================="
         
-    - name: Keep Bot Running
+    - name: Final Verification
       if: success()
       run: |
         BOT_PID=$(cat bot.pid)
-        echo "Monitoring bot (PID: $BOT_PID)..."
-        echo "Workflow will timeout after 6 hours"
+        echo "Final verification..."
         
-        # Monitor every 5 minutes for 6 hours
-        for i in {1..72}; do
-          if ! ps -p $BOT_PID > /dev/null 2>&1; then
-            echo "❌ Bot stopped unexpectedly!"
-            tail -50 bot.log
-            exit 1
-          fi
-          sleep 300
-          echo "[Check $i/72] Bot still running..."
-        done
-        
-        echo "⏱️  Workflow timeout reached (6 hours)"
-      timeout-minutes: 360
+        # Verify bot is still running
+        if ps -p $BOT_PID > /dev/null 2>&1; then
+          echo "✅ Bot is running (PID: $BOT_PID)"
+          echo ""
+          echo "📋 Recent bot activity:"
+          tail -10 bot.log || echo "No recent logs"
+          echo ""
+          echo "✅ Workflow completed successfully!"
+          echo ""
+          echo "⚠️  IMPORTANT: This workflow will now complete."
+          echo "   The bot will continue running until the GitHub Actions runner"
+          echo "   is stopped (typically after workflow completion or timeout)."
+          echo ""
+          echo "📖 For 24/7 operation, deploy to:"
+          echo "   - Railway.app (recommended)"
+          echo "   - Render.com"
+          echo "   - Fly.io"
+          echo "   - VPS with systemd"
+          echo "   See DEPLOYMENT.md for detailed instructions."
+        else
+          echo "❌ Bot stopped unexpectedly!"
+          echo "Final logs:"
+          tail -50 bot.log
+          exit 1
+        fi
