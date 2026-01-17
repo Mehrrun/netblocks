@@ -75,82 +75,12 @@ jobs:
         
     - name: Start Telegram Bot
       run: |
-        echo "🚀 Starting NetBlocks Telegram Bot in background..."
+        echo "🚀 Starting NetBlocks Telegram Bot..."
+        echo "Bot will run in foreground to keep process alive"
+        echo ""
         
-        # Run bot in background
-        nohup ./netblocks-telegram-bot > bot.log 2>&1 &
-        BOT_PID=$!
-        echo $BOT_PID > bot.pid
-        
-        echo "Bot started with PID: $BOT_PID"
-        echo "Waiting 3 seconds for bot to initialize..."
-        sleep 3
-        
-        # Check if bot process is still running
-        if ps -p $BOT_PID > /dev/null 2>&1; then
-          echo "✅ Bot is running successfully (PID: $BOT_PID)"
-          echo ""
-          echo "📋 Bot logs (last 30 lines):"
-          echo "----------------------------------------"
-          tail -30 bot.log || echo "No logs yet"
-          echo "----------------------------------------"
-          echo ""
-          echo "✅ Deployment completed successfully!"
-        else
-          echo "❌ Bot process died immediately!"
-          echo ""
-          echo "📋 Bot logs:"
-          echo "----------------------------------------"
-          cat bot.log || echo "No logs available"
-          echo "----------------------------------------"
-          exit 1
-        fi
+        # Run bot in foreground - this keeps the workflow and bot running
+        ./netblocks-telegram-bot
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
-        
-    - name: Deployment Summary
-      if: success()
-      run: |
-        echo "=========================================="
-        echo "✅ DEPLOYMENT COMPLETE"
-        echo "=========================================="
-        echo "Bot Status: Running"
-        echo "PID: $(cat bot.pid 2>/dev/null || echo 'N/A')"
-        echo ""
-        echo "⚠️  Note: GitHub Actions free tier has a 6-hour timeout limit."
-        echo "   For 24/7 production, deploy to Railway, Render, Fly.io, or VPS."
-        echo "   See DEPLOYMENT.md for instructions."
-        echo "=========================================="
-        
-    - name: Final Verification
-      if: success()
-      run: |
-        BOT_PID=$(cat bot.pid)
-        echo "Final verification..."
-        
-        # Verify bot is still running
-        if ps -p $BOT_PID > /dev/null 2>&1; then
-          echo "✅ Bot is running (PID: $BOT_PID)"
-          echo ""
-          echo "📋 Recent bot activity:"
-          tail -10 bot.log || echo "No recent logs"
-          echo ""
-          echo "✅ Workflow completed successfully!"
-          echo ""
-          echo "⚠️  IMPORTANT: This workflow will now complete."
-          echo "   The bot will continue running until the GitHub Actions runner"
-          echo "   is stopped (typically after workflow completion or timeout)."
-          echo ""
-          echo "📖 For 24/7 operation, deploy to:"
-          echo "   - Railway.app (recommended)"
-          echo "   - Render.com"
-          echo "   - Fly.io"
-          echo "   - VPS with systemd"
-          echo "   See DEPLOYMENT.md for detailed instructions."
-        else
-          echo "❌ Bot stopped unexpectedly!"
-          echo "Final logs:"
-          tail -50 bot.log
-          exit 1
-        fi
