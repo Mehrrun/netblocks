@@ -82,6 +82,9 @@ func main() {
 	if cfg.TelegramChannel != "" {
 		log.Printf("📢 Channel updates enabled for: %s", cfg.TelegramChannel)
 		log.Println("   Channel will receive updates every 10 minutes")
+		
+		// Send immediate startup message to channel
+		go bot.SendStartupMessage(ctx)
 	}
 	log.Println("")
 	log.Println("🔄 Bot is running continuously...")

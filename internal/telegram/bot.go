@@ -72,6 +72,24 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 	return bot, nil
 }
 
+// SendStartupMessage sends an immediate startup notification to the channel
+func (b *Bot) SendStartupMessage(ctx context.Context) {
+	if b.channelID == "" {
+		return
+	}
+	
+	// Wait a moment for bot to be fully initialized
+	time.Sleep(2 * time.Second)
+	
+	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Bot is now monitoring Iranian networks\n📊 Monitoring %d ASNs and %d+ DNS servers\n⏰ Updates will be sent every 10 minutes\n\nBot started at: `%s`",
+		len(b.config.IranASNs),
+		len(b.config.DNSServers),
+		time.Now().Format("2006-01-02 15:04:05"))
+	
+	log.Printf("📤 Sending startup message to channel: %s", b.channelID)
+	b.sendMessage(b.channelID, startupMsg)
+}
+
 // Start starts the bot
 func (b *Bot) Start(ctx context.Context) {
 	u := tgbotapi.NewUpdate(0)
