@@ -62,39 +62,61 @@ jobs:
     - name: Run Telegram Bot (Background)
       run: |
         chmod +x netblocks-telegram-bot
-        echo "Starting NetBlocks Telegram Bot in background..."
+        echo "🚀 Starting NetBlocks Telegram Bot in background..."
         
         # Run bot in background and save PID
         nohup ./netblocks-telegram-bot > bot.log 2>&1 &
-        echo $! > bot.pid
+        BOT_PID=$!
+        echo $BOT_PID > bot.pid
         
-        echo "Bot started with PID: $(cat bot.pid)"
-        echo "Waiting 10 seconds for bot to initialize..."
-        sleep 10
+        echo "Bot started with PID: $BOT_PID"
+        echo "Waiting 15 seconds for bot to initialize..."
+        sleep 15
         
         # Check if bot process is still running
-        if ps -p $(cat bot.pid) > /dev/null; then
-          echo "✓ Bot is running successfully"
-          echo "Bot logs (last 20 lines):"
-          tail -20 bot.log || echo "No logs yet"
+        if ps -p $BOT_PID > /dev/null 2>&1; then
+          echo "✅ Bot is running successfully (PID: $BOT_PID)"
+          echo ""
+          echo "📋 Bot logs (last 30 lines):"
+          echo "----------------------------------------"
+          tail -30 bot.log || echo "No logs yet"
+          echo "----------------------------------------"
+          echo ""
+          echo "✅ Deployment completed successfully!"
+          echo "The bot will continue running in the background."
+          echo ""
+          echo "⚠️  Note: GitHub Actions free tier has a 6-hour timeout limit."
+          echo "   For production use, consider deploying to:"
+          echo "   - Railway.app, Render.com, Fly.io, or a VPS"
         else
-          echo "✗ Bot process died immediately!"
-          echo "Bot logs:"
+          echo "❌ Bot process died immediately!"
+          echo ""
+          echo "📋 Bot logs:"
+          echo "----------------------------------------"
           cat bot.log || echo "No logs available"
+          echo "----------------------------------------"
           exit 1
         fi
         
-        # Keep workflow alive by tailing logs
-        echo "Bot is running. Monitoring logs..."
-        tail -f bot.log &
-        TAIL_PID=$!
+        # Keep the workflow running to maintain the bot
+        # GitHub Actions will timeout after 6 hours on free tier
+        echo ""
+        echo "🔄 Keeping workflow alive to maintain bot service..."
+        echo "   (This will run until GitHub Actions timeout or manual cancellation)"
         
-        # Wait for workflow timeout (GitHub Actions free tier: 6 hours)
-        # This keeps the workflow running and the bot active
-        timeout 21500 tail -f bot.log || true
+        # Monitor bot health every 60 seconds
+        while ps -p $BOT_PID > /dev/null 2>&1; do
+          sleep 60
+          # Log every 10 minutes
+          if [ $(($(date +%s) % 600)) -eq 0 ]; then
+            echo "[$(date)] Bot is still running (PID: $BOT_PID)"
+          fi
+        done
         
-        # Cleanup
-        kill $TAIL_PID 2>/dev/null || true
+        echo "❌ Bot process stopped unexpectedly!"
+        echo "Final logs:"
+        tail -50 bot.log
+        exit 1
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
