@@ -692,6 +692,18 @@ func GetASNName(asn string) string {
 		"AS60631": "ParsPack",
 		"AS61173": "IranServer",
 		"AS57067": "Iranian Data Center",
+
+		// Cross-Border / Suspicious ASNs
+		"AS199739": "Earthlink Telecommunications Iraq",
+		"AS50710":  "Earthlink Telecommunication Iraq",
+		"AS59692":  "IQWeb FZ-LLC",
+		"AS203214": "Hulum Almustakbal LTD",
+		"AS57568":  "ArvanCloud Global",
+		"AS208800": "G42 Cloud LLC",
+		"AS41268":  "Sesameware FZ-LLC",
+		"AS60924":  "Orixcom DMCC",
+		"AS198398": "Symphony Solutions FZ-LLC",
+		"AS41152":  "Ertebatat Fara Gostar Shargh",
 	}
 
 	if name, exists := asnNames[asn]; exists {

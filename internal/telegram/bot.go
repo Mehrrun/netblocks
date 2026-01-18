@@ -12,6 +12,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/netblocks/netblocks/internal/config"
 	"github.com/netblocks/netblocks/internal/models"
+	"github.com/netblocks/netblocks/internal/monitor"
 )
 
 // Bot represents the Telegram bot
@@ -560,6 +561,11 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 	if dnsText != "" {
 		b.sendMessage(chatID, dnsText)
 	}
+	
+	// Send traffic chart if available
+	if result.TrafficData != nil {
+		b.sendTrafficChart(chatID, result.TrafficData)
+	}
 }
 
 // SendPeriodicUpdates sends periodic status updates to all subscribed users
@@ -661,6 +667,45 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+// sendTrafficChart sends the traffic chart as a photo with caption
+func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
+	if data == nil || data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
+		log.Printf("⚠️ No traffic chart data available to send")
+		return
+	}
+	
+	// Format caption with traffic status
+	caption := monitor.FormatTrafficStatus(data)
+	
+	// Create photo message
+	fileBytes := tgbotapi.FileBytes{
+		Name:  "iran_traffic_24h.png",
+		Bytes: data.ChartBuffer.Bytes(),
+	}
+	
+	var photo tgbotapi.PhotoConfig
+	switch id := chatID.(type) {
+	case int64:
+		photo = tgbotapi.NewPhoto(id, fileBytes)
+	case string:
+		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
+	default:
+		log.Printf("❌ Error: invalid chatID type for photo: %T", chatID)
+		return
+	}
+	
+	photo.Caption = caption
+	photo.ParseMode = tgbotapi.ModeMarkdown
+	
+	log.Printf("📊 Sending traffic chart to %v", chatID)
+	sentMsg, err := b.api.Send(photo)
+	if err != nil {
+		log.Printf("❌ Error sending traffic chart to %v: %v", chatID, err)
+	} else {
+		log.Printf("✅ Traffic chart sent successfully to %v (message ID: %d)", chatID, sentMsg.MessageID)
 	}
 }
 

@@ -6,11 +6,13 @@ NetBlocks is a comprehensive network monitoring tool designed to monitor Iranian
 
 - **BGP Monitoring**: Real-time monitoring of Iranian AS connectivity using RIPE RIS Live WebSocket API
 - **DNS Monitoring**: Continuous monitoring of Iranian DNS servers' availability and response times
+- **Traffic Monitoring**: Visual traffic analysis using Cloudflare Radar API with PNG chart generation
 - **Telegram Bot**: Interactive bot for checking network status and configuring monitoring intervals
 - **CLI Interface**: Command-line tool for monitoring and status reporting
 - **Configurable Intervals**: Set custom monitoring intervals via Telegram bot or CLI
 - **Periodic Analysis**: Automatic analysis runs every 10 minutes to check network connectivity
 - **Readable Output**: Elegant formatting with emojis and clear status indicators
+- **Visual Charts**: Professional PNG charts showing Iran's internet traffic trends (24-hour)
 
 ## Architecture
 
@@ -23,7 +25,7 @@ NetBlocks/
 │   └── telegram-bot/  # Telegram bot binary
 ├── internal/
 │   ├── config/        # Configuration management
-│   ├── monitor/       # BGP and DNS monitoring logic
+│   ├── monitor/       # BGP, DNS, and traffic monitoring logic
 │   ├── models/        # Data models
 │   └── telegram/      # Telegram bot implementation
 ├── go.mod
@@ -147,6 +149,20 @@ DNS monitoring includes:
 - Availability status tracking
 - Error reporting for failed queries
 - Monitoring of authoritative nameservers from .ir domains
+- Support for both recursive and authoritative DNS servers
+- Distinguishes between network errors and DNS-level responses
+
+### Traffic Monitoring
+
+Traffic monitoring provides:
+- Real-time Iran internet traffic analysis via Cloudflare Radar API
+- 24-hour traffic trend visualization with PNG charts
+- Traffic level percentage calculations
+- Change detection (vs baseline)
+- Status classification: Normal (>70%), Degraded (30-70%), Throttled (10-30%), Shutdown (<10%)
+- Visual charts sent as images in Telegram
+- 5-minute caching to avoid API rate limits
+- Background refresh every 10 minutes
 
 ## Monitored Iranian ASNs
 
@@ -411,6 +427,14 @@ NetBlocks uses the [RIPE RIS Live WebSocket API](https://ris-live.ripe.net/manua
 
 DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to test server availability. The tool queries authoritative nameservers directly to check their responsiveness.
 
+### Cloudflare Radar API
+
+Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare.com/radar/) for Iran's internet traffic data:
+- Endpoint: `https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth`
+- No authentication required for basic data
+- 24-hour historical data with 1-hour aggregation intervals
+- Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
+
 ## Output Format
 
 ### CLI Output
@@ -425,6 +449,12 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 - 🔴 Red circle = Disconnected/Down
 - Hierarchical display with tree-style formatting
 - Summary statistics
+- **Traffic charts sent as PNG images** with:
+  - 800x400px line chart
+  - 24-hour traffic trend
+  - Color-coded status (Green=Normal, Yellow=Degraded, Orange=Throttled, Red=Shutdown)
+  - Traffic level percentage
+  - Change percentage vs baseline
 
 ## Troubleshooting
 
@@ -451,6 +481,13 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 - Some nameservers may not be publicly resolvable from outside Iran
 - DNS queries use `leader.ir` as the test domain
 - Check if you're running from within Iran for accurate results
+
+### Traffic Chart Not Showing
+
+- Ensure internet connectivity to Cloudflare Radar API
+- Check for API rate limiting (uses 5-minute cache to prevent this)
+- Traffic data refreshes every 10 minutes in background
+- Chart generation requires go-chart library dependencies
 
 ## Contributing
 

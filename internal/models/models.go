@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"bytes"
+	"time"
+)
 
 // ASNStatus represents the connectivity status of an Autonomous System
 type ASNStatus struct {
@@ -32,8 +35,21 @@ type MonitoringConfig struct {
 
 // MonitoringResult contains the results of a monitoring check
 type MonitoringResult struct {
-	Timestamp   time.Time              `json:"timestamp"`
-	ASNStatuses map[string]*ASNStatus  `json:"asn_statuses"`
-	DNSStatuses map[string]*DNSStatus  `json:"dns_statuses"`
+	Timestamp    time.Time              `json:"timestamp"`
+	ASNStatuses  map[string]*ASNStatus  `json:"asn_statuses"`
+	DNSStatuses  map[string]*DNSStatus  `json:"dns_statuses"`
+	TrafficData  *TrafficData           `json:"traffic_data,omitempty"`
+}
+
+// TrafficData represents Iran's internet traffic statistics
+type TrafficData struct {
+	CurrentLevel  float64       `json:"current_level"`
+	Trend24h      []float64     `json:"trend_24h"`
+	Timestamps    []time.Time   `json:"timestamps"`
+	ChangePercent float64       `json:"change_percent"`
+	Status        string        `json:"status"`
+	StatusEmoji   string        `json:"status_emoji"`
+	ChartBuffer   *bytes.Buffer `json:"-"` // PNG chart, not serialized to JSON
+	LastUpdate    time.Time     `json:"last_update"`
 }
 

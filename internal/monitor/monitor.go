@@ -12,10 +12,11 @@ import (
 
 // Monitor coordinates BGP and DNS monitoring
 type Monitor struct {
-	bgpClient  *RISLiveClient
-	dnsMonitor *DNSMonitor
-	config     *config.Config
-	results    *models.MonitoringResult
+	bgpClient      *RISLiveClient
+	dnsMonitor     *DNSMonitor
+	trafficMonitor *TrafficMonitor
+	config         *config.Config
+	results        *models.MonitoringResult
 }
 
 // NewMonitor creates a new monitor instance
@@ -38,10 +39,14 @@ func NewMonitor(cfg *config.Config) (*Monitor, error) {
 	// Initialize DNS monitor with 8 second timeout for better reliability
 	dnsMonitor := NewDNSMonitor(cfg.DNSServers, 8*time.Second)
 
+	// Initialize Traffic monitor
+	trafficMonitor := NewTrafficMonitor()
+
 	return &Monitor{
-		bgpClient:  bgpClient,
-		dnsMonitor: dnsMonitor,
-		config:     cfg,
+		bgpClient:      bgpClient,
+		dnsMonitor:     dnsMonitor,
+		trafficMonitor: trafficMonitor,
+		config:         cfg,
 		results: &models.MonitoringResult{
 			Timestamp:   time.Now(),
 			ASNStatuses: make(map[string]*models.ASNStatus),
@@ -56,19 +61,25 @@ func (m *Monitor) PerformInitialCheck(ctx context.Context) {
 	// Perform initial DNS check synchronously
 	_ = m.dnsMonitor.CheckAll(ctx)
 	
+	// Fetch initial traffic data
+	_, _ = m.trafficMonitor.FetchFromCloudflare(ctx)
+	
 	// Ensure BGP client has started and is ready
 	// (BGP statuses are event-driven and will update as messages arrive)
 	// Give a brief moment for WebSocket connection to stabilize
 	time.Sleep(1 * time.Second)
 	
 	// Update results with initial data
-	m.updateResults()
+	m.updateResults(ctx)
 }
 
 // Start starts monitoring
 func (m *Monitor) Start(ctx context.Context) {
 	// Start DNS periodic checks
 	go m.dnsMonitor.StartPeriodicCheck(ctx, m.config.Interval)
+
+	// Start traffic monitoring in background
+	go m.trafficMonitor.Start(ctx)
 
 	// Start periodic BGP connectivity checks
 	ticker := time.NewTicker(m.config.Interval)
@@ -79,25 +90,54 @@ func (m *Monitor) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.updateResults()
+			m.updateResults(ctx)
 		}
 	}
 }
 
 // GetResults returns current monitoring results
 func (m *Monitor) GetResults() *models.MonitoringResult {
-	m.updateResults()
+	m.updateResults(context.Background())
 	return m.results
 }
 
-func (m *Monitor) updateResults() {
+func (m *Monitor) updateResults(ctx context.Context) {
 	asnStatuses := m.bgpClient.CheckConnectivity()
 	dnsStatuses := m.dnsMonitor.GetStatuses()
+	
+	// Get traffic data (will use cache if fresh)
+	trafficData, err := m.trafficMonitor.GetTrafficData(ctx)
+	if err != nil {
+		log.Printf("Warning: Failed to get traffic data: %v", err)
+		trafficData = nil
+	}
+	
+	// Generate chart if we have traffic data
+	var trafficModelData *models.TrafficData
+	if trafficData != nil {
+		chartBuffer, err := GenerateTrafficChart(trafficData)
+		if err != nil {
+			log.Printf("Warning: Failed to generate traffic chart: %v", err)
+		}
+		
+		// Convert to models.TrafficData
+		trafficModelData = &models.TrafficData{
+			CurrentLevel:  trafficData.CurrentLevel,
+			Trend24h:      trafficData.Trend24h,
+			Timestamps:    trafficData.Timestamps,
+			ChangePercent: trafficData.ChangePercent,
+			Status:        trafficData.Status,
+			StatusEmoji:   trafficData.StatusEmoji,
+			ChartBuffer:   chartBuffer,
+			LastUpdate:    trafficData.LastUpdate,
+		}
+	}
 
 	m.results = &models.MonitoringResult{
 		Timestamp:   time.Now(),
 		ASNStatuses: asnStatuses,
 		DNSStatuses: dnsStatuses,
+		TrafficData: trafficModelData,
 	}
 }
 
