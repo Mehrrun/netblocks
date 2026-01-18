@@ -250,15 +250,19 @@ jobs:
             echo "❌ Connection Status: NOT CONNECTED to Cloudflare"
             if [ -n "$STATUS_CODE" ]; then
               echo "   HTTP Status: $STATUS_CODE"
+            else
+              echo "   HTTP Status: (No status code logged yet)"
             fi
             if [ -n "$ERROR_MSG" ]; then
               echo "   Error: $ERROR_MSG"
+            else
+              echo "   Error: (No error message found in logs)"
             fi
             echo "   Data Status: NOT AVAILABLE (using default 1% connection data)"
           fi
           
-          # Add diagnostic information section
-          if [ "$API_CONNECTED" = false ] || [ -n "$ERROR_MSG" ]; then
+          # ALWAYS show diagnostic information section when NOT CONNECTED
+          if [ "$API_CONNECTED" = false ]; then
             echo ""
             echo "--- Cloudflare Diagnostic Information ---"
             
@@ -274,12 +278,29 @@ jobs:
               echo "Authentication Used: $AUTH_USED"
             fi
             
-            # Show recent Cloudflare-related log lines (last 8 lines)
+            # Show recent Cloudflare-related log lines (last 10 lines)
             echo ""
-            echo "Recent Cloudflare API Logs (last 8 lines):"
-            grep -i "cloudflare\|radar" bot.log 2>/dev/null | tail -8 | while read line; do
-              echo "  $line"
-            done || echo "  (No Cloudflare logs found yet)"
+            echo "Recent Cloudflare API Logs (last 10 lines):"
+            CLOUDFLARE_LOGS=$(grep -i "cloudflare\|radar" bot.log 2>/dev/null | tail -10)
+            if [ -n "$CLOUDFLARE_LOGS" ]; then
+              echo "$CLOUDFLARE_LOGS" | while read line; do
+                echo "  $line"
+              done
+            else
+              echo "  (No Cloudflare logs found in bot.log)"
+              echo ""
+              echo "  Checking if bot.log exists and has content..."
+              if [ -f bot.log ]; then
+                LOG_SIZE=$(wc -l < bot.log)
+                echo "  bot.log exists with $LOG_SIZE lines"
+                echo "  Last 5 lines of bot.log:"
+                tail -5 bot.log | while read line; do
+                  echo "    $line"
+                done
+              else
+                echo "  bot.log file does not exist"
+              fi
+            fi
             
             # Show response body if available
             if [ -n "$RESPONSE_BODY" ]; then
@@ -296,6 +317,9 @@ jobs:
                 COUNT=$(grep "Cloudflare API response: Status $code" bot.log | wc -l)
                 echo "  Status $code: $COUNT time(s)"
               done
+            else
+              echo ""
+              echo "No HTTP status codes found in logs (API call may not have completed yet)"
             fi
             
             # Show all Cloudflare API errors
@@ -305,6 +329,32 @@ jobs:
               grep "Cloudflare API error" bot.log | tail -5 | while read line; do
                 echo "  $line"
               done
+            else
+              echo ""
+              echo "No Cloudflare API errors found in logs"
+            fi
+            
+            # Show any network errors
+            if grep -q "Error making HTTP request to Cloudflare" bot.log 2>/dev/null; then
+              echo ""
+              echo "Network Connection Errors:"
+              grep "Error making HTTP request to Cloudflare" bot.log | tail -3 | while read line; do
+                echo "  $line"
+              done
+            fi
+            
+            # Show if API calls are being attempted
+            if grep -q "Fetching Cloudflare Radar data from:" bot.log 2>/dev/null; then
+              API_CALL_COUNT=$(grep "Fetching Cloudflare Radar data from:" bot.log | wc -l)
+              echo ""
+              echo "API Calls Attempted: $API_CALL_COUNT time(s)"
+              echo "Last API Call:"
+              grep "Fetching Cloudflare Radar data from:" bot.log | tail -1 | sed 's/.*Fetching Cloudflare Radar data from: *//' | while read line; do
+                echo "  $line"
+              done
+            else
+              echo ""
+              echo "⚠️  No API calls found in logs - bot may not be attempting Cloudflare API calls yet"
             fi
             
             echo "--- End Diagnostic Information ---"
