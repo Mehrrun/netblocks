@@ -58,19 +58,30 @@ func NewMonitor(cfg *config.Config) (*Monitor, error) {
 
 // PerformInitialCheck performs an initial synchronous check of all monitors
 // This ensures results are available before the first status display
+// IMPORTANT: Fetches Cloudflare data FIRST, then DNS, then BGP
 func (m *Monitor) PerformInitialCheck(ctx context.Context) {
-	// Perform initial DNS check synchronously
-	_ = m.dnsMonitor.CheckAll(ctx)
+	// Fetch Cloudflare traffic data FIRST (most important - used for diagram)
+	log.Println("📡 Fetching Cloudflare Radar data for Iran...")
+	trafficData, err := m.trafficMonitor.FetchFromCloudflare(ctx)
+	if err != nil {
+		log.Printf("⚠️  Cloudflare fetch error (will use defaults): %v", err)
+	} else if trafficData != nil {
+		log.Printf("✅ Cloudflare data fetched successfully - Current Level: %.1f%%, Status: %s %s", 
+			trafficData.CurrentLevel, trafficData.StatusEmoji, trafficData.Status)
+	} else {
+		log.Println("⚠️  Cloudflare data is nil (will use defaults)")
+	}
 	
-	// Fetch initial traffic data
-	_, _ = m.trafficMonitor.FetchFromCloudflare(ctx)
+	// Perform initial DNS check synchronously
+	log.Println("🔍 Checking DNS servers...")
+	_ = m.dnsMonitor.CheckAll(ctx)
 	
 	// Ensure BGP client has started and is ready
 	// (BGP statuses are event-driven and will update as messages arrive)
 	// Give a brief moment for WebSocket connection to stabilize
 	time.Sleep(1 * time.Second)
 	
-	// Update results with initial data
+	// Update results with initial data (Cloudflare data should be ready now)
 	m.updateResults(ctx)
 }
 

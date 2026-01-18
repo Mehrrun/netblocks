@@ -542,7 +542,8 @@ func (b *Bot) sendMessage(chatID interface{}, text string) {
 	}
 }
 
-// sendStatusMessages sends status in multiple messages (ASN and DNS separately)
+// sendStatusMessages sends status in multiple messages
+// ORDER: Header -> Traffic Chart (diagram FIRST) -> ASN status -> DNS status
 // chatID can be int64 (user) or string (channel username)
 func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringResult) {
 	// Send header
@@ -550,23 +551,28 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 		result.Timestamp.Format("2006-01-02 15:04:05"))
 	b.sendMessage(chatID, header)
 	
-	// Send ASN status
+	// Send traffic chart FIRST (diagram before other data)
+	if result.TrafficData != nil {
+		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
+			log.Printf("📈 Sending traffic chart FIRST (before ASN/DNS data)")
+			b.sendTrafficChart(chatID, result.TrafficData)
+		} else {
+			log.Printf("⚠️  Traffic chart buffer is empty - skipping chart")
+		}
+	} else {
+		log.Printf("⚠️  Traffic data is nil - no chart available")
+	}
+	
+	// Send ASN status (after diagram)
 	asnText := b.formatASNStatus(result)
 	if asnText != "" {
 		b.sendMessage(chatID, asnText)
 	}
 	
-	// Send DNS status (may be split into multiple messages)
+	// Send DNS status (after diagram and ASN)
 	dnsText := b.formatDNSStatus(result)
 	if dnsText != "" {
 		b.sendMessage(chatID, dnsText)
-	}
-	
-	// Send traffic chart if available
-	if result.TrafficData != nil {
-		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
-			b.sendTrafficChart(chatID, result.TrafficData)
-		}
 	}
 }
 

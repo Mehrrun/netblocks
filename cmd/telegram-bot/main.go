@@ -69,7 +69,11 @@ func main() {
 	defer cancel()
 
 	// Perform initial check to ensure DNS results are available before bot starts
+	// This also fetches Cloudflare data FIRST before anything else
+	log.Println("🔄 Performing initial checks (Cloudflare, DNS, BGP)...")
+	log.Println("📊 Fetching Cloudflare Radar data FIRST...")
 	mon.PerformInitialCheck(ctx)
+	log.Println("✅ Initial checks completed - Cloudflare data fetched")
 
 	// Create Telegram bot
 	bot, err := telegram.NewBot(cfg.TelegramToken, cfg, func() (*models.MonitoringResult, error) {

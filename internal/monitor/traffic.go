@@ -316,18 +316,20 @@ func (tm *TrafficMonitor) determineStatus(current, baseline float64) (string, st
 }
 
 // Start begins background monitoring
+// Note: Initial fetch should already be done in PerformInitialCheck
 func (tm *TrafficMonitor) Start(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
-	// Initial fetch
-	_, _ = tm.FetchFromCloudflare(ctx)
+	// Skip initial fetch here - it's already done in PerformInitialCheck
+	// This ensures Cloudflare data is fetched FIRST before bot starts
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			log.Println("📡 Periodic Cloudflare Radar data fetch...")
 			_, _ = tm.FetchFromCloudflare(ctx)
 		}
 	}
