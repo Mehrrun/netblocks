@@ -117,7 +117,7 @@ func (m *Monitor) updateResults(ctx context.Context) {
 	asnStatuses := m.bgpClient.CheckConnectivity()
 	dnsStatuses := m.dnsMonitor.GetStatuses()
 	
-	// Get traffic data (will use cache if fresh, or default if API fails)
+	// Get traffic data (will use cache if fresh; nil on error)
 	trafficData, _ := m.trafficMonitor.GetTrafficData(ctx)
 	
 	// Generate chart

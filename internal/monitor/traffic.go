@@ -65,7 +65,6 @@ func NewTrafficMonitor(cloudflareToken, cloudflareEmail, cloudflareKey string) *
 }
 
 // GetTrafficData returns cached or fresh traffic data
-// Always returns data - falls back to default if API fails
 func (tm *TrafficMonitor) GetTrafficData(ctx context.Context) (*TrafficData, error) {
 	tm.mu.RLock()
 	// Return cached data if fresh (less than 5 minutes old)
@@ -76,12 +75,11 @@ func (tm *TrafficMonitor) GetTrafficData(ctx context.Context) (*TrafficData, err
 	}
 	tm.mu.RUnlock()
 
-	// Fetch fresh data (will return default if API fails)
+	// Fetch fresh data
 	return tm.FetchFromCloudflare(ctx)
 }
 
 // FetchFromCloudflare fetches traffic data from Cloudflare Radar API
-// Falls back to default values (1% connection) if API fails
 func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData, error) {
 	// Cloudflare Radar API endpoint for Iran HTTP traffic bandwidth
 	// Using timeseries endpoint - returns HTTP request volume/time over time.
@@ -97,7 +95,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Printf("Error creating HTTP request: %v", err)
-		return tm.getDefaultData(), nil
+		return nil, err
 	}
 
 	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
@@ -120,7 +118,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	resp, err := tm.client.Do(req)
 	if err != nil {
 		log.Printf("Error making HTTP request to Cloudflare: %v (auth method: %s)", err, authMethod)
-		return tm.getDefaultData(), nil
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -128,7 +126,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Error reading response body: %v", err)
-		return tm.getDefaultData(), nil
+		return nil, err
 	}
 
 	log.Printf("Cloudflare API response: Status %d %s (auth method: %s)", resp.StatusCode, resp.Status, authMethod)
@@ -150,14 +148,14 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 			}
 		}
 		
-		return tm.getDefaultData(), nil
+		return nil, fmt.Errorf("cloudflare API status %d", resp.StatusCode)
 	}
 
 	var apiResp CloudflareRadarResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		log.Printf("Error decoding JSON response: %v", err)
 		log.Printf("Response body (first 500 chars): %s", string(bodyBytes[:min(500, len(bodyBytes))]))
-		return tm.getDefaultData(), nil
+		return nil, err
 	}
 
 	if !apiResp.Success {
@@ -169,7 +167,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 		} else {
 			log.Printf("Cloudflare API returned success=false (no error details provided)")
 		}
-		return tm.getDefaultData(), nil
+		return nil, fmt.Errorf("cloudflare API returned success=false")
 	}
 
 	timestamps, values, found := extractSeries(apiResp.Result)
@@ -184,7 +182,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 
 		log.Printf("Cloudflare API returned empty or unrecognized data structure")
 		log.Printf("Full response body (first 2000 chars): %s", string(bodyBytes[:min(2000, len(bodyBytes))]))
-		return tm.getDefaultData(), nil
+		return nil, fmt.Errorf("no traffic data in response")
 	}
 
 	// Keep only the last 24 data points (24 hours) to match chart expectations
@@ -195,7 +193,7 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	data, err := tm.processData(values, timestamps)
 	if err != nil {
 		log.Printf("Error processing traffic data: %v", err)
-		return tm.getDefaultData(), nil
+		return nil, err
 	}
 
 	log.Printf("Traffic data processed successfully - Current Level: %.1f%%, Status: %s %s", 
@@ -506,29 +504,6 @@ func (tm *TrafficMonitor) fetchWithURL(ctx context.Context, url string) (*Traffi
 	return data, true
 }
 
-// getDefaultData returns default traffic data (1% connection) when API fails
-func (tm *TrafficMonitor) getDefaultData() *TrafficData {
-	// Generate 24 hours of data points with 1% connection
-	hours := 24
-	trend := make([]float64, hours)
-	timestamps := make([]time.Time, hours)
-	
-	now := time.Now()
-	for i := 0; i < hours; i++ {
-		trend[i] = 1.0 // 1% connection
-		timestamps[i] = now.Add(-time.Duration(hours-i-1) * time.Hour)
-	}
-
-	return &TrafficData{
-		CurrentLevel:  1.0,
-		Trend24h:     trend,
-		Timestamps:   timestamps,
-		ChangePercent: 0.0,
-		Status:       "Shutdown",
-		StatusEmoji:  "🔴",
-		LastUpdate:   time.Now(),
-	}
-}
 
 // processData processes the Cloudflare API response into TrafficData
 func (tm *TrafficMonitor) processData(values []float64, timestamps []string) (*TrafficData, error) {
