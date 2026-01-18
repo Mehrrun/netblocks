@@ -103,6 +103,55 @@ jobs:
         echo "📊 Monitoring Iranian ASNs and DNS servers"
         echo "📢 Sending updates to Telegram channel every 10 minutes"
         echo ""
+        
+        # Print Cloudflare authentication status
+        echo "=========================================="
+        echo "🔑 Cloudflare Authentication Status:"
+        echo "=========================================="
+        if [ -n "${{ secrets.CLOUDFLARE_TOKEN }}" ]; then
+          TOKEN_LEN=${#CLOUDFLARE_TOKEN}
+          echo "✅ CLOUDFLARE_TOKEN is set (length: $TOKEN_LEN characters)"
+          if [ $TOKEN_LEN -gt 0 ]; then
+            echo "✅ Token is non-empty"
+          else
+            echo "❌ Token is empty!"
+          fi
+        else
+          echo "❌ CLOUDFLARE_TOKEN secret is not set"
+        fi
+        
+        # Check if token is passed to bot process
+        if grep -q "NewTrafficMonitor: token set=true" bot.log 2>/dev/null; then
+          echo "✅ Bot process received Cloudflare token"
+          grep "NewTrafficMonitor: token" bot.log | tail -1 || true
+        elif grep -q "NewTrafficMonitor: token set=false" bot.log 2>/dev/null; then
+          echo "❌ Bot process did NOT receive Cloudflare token"
+        else
+          echo "⏳ Waiting for bot to initialize and check token..."
+        fi
+        
+        # Check for Cloudflare API authentication logs
+        if grep -q "Using Cloudflare Bearer Token authentication" bot.log 2>/dev/null; then
+          echo "✅ Bot is using Cloudflare Bearer Token authentication"
+          grep "Using Cloudflare.*authentication" bot.log | tail -1 || true
+        fi
+        
+        # Check for Cloudflare API response
+        if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+          echo ""
+          echo "📡 Recent Cloudflare API responses:"
+          grep "Cloudflare API response: Status" bot.log | tail -3 || true
+        fi
+        
+        # Check for Cloudflare errors
+        if grep -qi "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403\|WARNING: No Cloudflare credentials" bot.log 2>/dev/null; then
+          echo ""
+          echo "⚠️  Cloudflare warnings/errors found:"
+          grep -i "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403\|WARNING: No Cloudflare credentials" bot.log | tail -3 || true
+        fi
+        
+        echo "=========================================="
+        echo ""
         echo "This workflow will stay 'Running' (yellow status) forever."
         echo "To stop the bot: Cancel this workflow in GitHub Actions UI"
         echo "To restart: Cancel workflow, then push a new commit or trigger manually"
@@ -127,12 +176,23 @@ jobs:
           # Show timestamp and status
           echo "[$(date '+%Y-%m-%d %H:%M:%S UTC')] Check #$COUNTER - Bot alive (PID: $BOT_PID)"
           
-          # Every 10 checks (50 minutes), show recent logs
+          # Every 10 checks (50 minutes), show recent logs and Cloudflare status
           if [ $((COUNTER % 10)) -eq 0 ]; then
             echo ""
             echo "--- Recent bot activity (last 30 lines) ---"
             tail -30 bot.log | grep -v "^$" || echo "No recent activity"
             echo "--- End of recent activity ---"
+            echo ""
+            echo "--- Cloudflare Status Check ---"
+            if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+              echo "Recent Cloudflare API responses:"
+              grep "Cloudflare API response: Status" bot.log | tail -3 || true
+            fi
+            if grep -qi "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403" bot.log 2>/dev/null; then
+              echo "⚠️  Cloudflare errors:"
+              grep -i "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403" bot.log | tail -3 || true
+            fi
+            echo "--- End Cloudflare Status ---"
             echo ""
           fi
           
