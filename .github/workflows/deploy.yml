@@ -214,6 +214,11 @@ jobs:
             API_CONNECTED=false
             STATUS_CODE="No Response Yet"
             ERROR_MSG="API call initiated but no response logged yet - check logs"
+          else
+            # No API calls found in logs at all
+            API_CONNECTED=false
+            STATUS_CODE="Not Attempted Yet"
+            ERROR_MSG="No Cloudflare API calls found in logs - bot may not have started fetching data yet"
           fi
           
           # Print summary
