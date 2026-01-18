@@ -311,6 +311,10 @@ func parseSerie(v interface{}) ([]string, []float64, bool) {
 				return ts, vals, true
 			}
 		}
+		// If values exist but timestamps are missing, accept and generate timestamps later
+		if len(values) > 0 && len(timestamps) == 0 {
+			return nil, values, true
+		}
 	case []interface{}:
 		if len(s) > 0 {
 			return parseSerie(s[0])
@@ -554,11 +558,22 @@ func (tm *TrafficMonitor) processData(values []float64, timestamps []string) (*T
 	status, emoji := tm.determineStatus(currentLevel, baselinePercent)
 
 	// Parse timestamps
-	timesList := make([]time.Time, len(timestamps))
-	for i, ts := range timestamps {
-		t, err := time.Parse(time.RFC3339, ts)
-		if err == nil {
-			timesList[i] = t
+	timesList := make([]time.Time, 0, len(values))
+	if len(timestamps) == len(values) && len(timestamps) > 0 {
+		for _, ts := range timestamps {
+			t, err := time.Parse(time.RFC3339, ts)
+			if err == nil {
+				timesList = append(timesList, t)
+			}
+		}
+	}
+
+	// If timestamps are missing or invalid, generate based on now and 1h interval
+	if len(timesList) != len(values) {
+		timesList = make([]time.Time, len(values))
+		now := time.Now().UTC()
+		for i := range values {
+			timesList[i] = now.Add(-time.Duration(len(values)-i-1) * time.Hour)
 		}
 	}
 
