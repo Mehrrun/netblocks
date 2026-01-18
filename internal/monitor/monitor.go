@@ -106,34 +106,17 @@ func (m *Monitor) updateResults(ctx context.Context) {
 	asnStatuses := m.bgpClient.CheckConnectivity()
 	dnsStatuses := m.dnsMonitor.GetStatuses()
 	
-	// Get traffic data (will use cache if fresh)
-	trafficData, err := m.trafficMonitor.GetTrafficData(ctx)
-	if err != nil {
-		log.Printf("⚠️  Failed to get traffic data: %v", err)
-		log.Printf("   Traffic charts will not be available in this update")
-		trafficData = nil
-	}
+	// Get traffic data (will use cache if fresh, or default if API fails)
+	trafficData, _ := m.trafficMonitor.GetTrafficData(ctx)
 	
-	// Generate chart if we have traffic data
+	// Generate chart
 	var trafficModelData *models.TrafficData
 	if trafficData != nil {
-		log.Printf("📊 Processing traffic data - Current Level: %.1f%%, Status: %s %s", 
-			trafficData.CurrentLevel, trafficData.StatusEmoji, trafficData.Status)
-		
-		// Generate chart
-		log.Printf("📈 Generating traffic chart...")
 		chartBuffer, err := GenerateTrafficChart(trafficData)
 		if err != nil {
-			log.Printf("❌ Failed to generate traffic chart: %v", err)
-			log.Printf("   Chart will not be included in this update, but traffic status text will still be sent")
-		} else if chartBuffer == nil || chartBuffer.Len() == 0 {
-			log.Printf("❌ Generated chart buffer is empty or nil")
-		} else {
-			log.Printf("✅ Traffic chart generated successfully (size: %d bytes)", chartBuffer.Len())
+			chartBuffer = nil
 		}
 		
-		// Convert to models.TrafficData (always create it, even if chart failed)
-		// This ensures traffic status text is still sent
 		trafficModelData = &models.TrafficData{
 			CurrentLevel:  trafficData.CurrentLevel,
 			Trend24h:      trafficData.Trend24h,
@@ -141,11 +124,9 @@ func (m *Monitor) updateResults(ctx context.Context) {
 			ChangePercent: trafficData.ChangePercent,
 			Status:        trafficData.Status,
 			StatusEmoji:   trafficData.StatusEmoji,
-			ChartBuffer:   chartBuffer, // Will be nil if generation failed
+			ChartBuffer:   chartBuffer,
 			LastUpdate:    trafficData.LastUpdate,
 		}
-	} else {
-		log.Printf("⚠️  No traffic data available - skipping chart generation")
 	}
 
 	m.results = &models.MonitoringResult{

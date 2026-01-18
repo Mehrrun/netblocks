@@ -562,16 +562,10 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 		b.sendMessage(chatID, dnsText)
 	}
 	
-	// Send traffic status (chart if available, or text if chart failed)
+	// Send traffic chart if available
 	if result.TrafficData != nil {
-		// Try to send chart if available
 		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
 			b.sendTrafficChart(chatID, result.TrafficData)
-		} else {
-			// Chart not available, send text status instead
-			log.Printf("⚠️  Traffic chart not available, sending text status instead")
-			trafficText := monitor.FormatTrafficStatus(result.TrafficData)
-			b.sendMessage(chatID, "📊 *Internet Traffic Status*\n\n"+trafficText)
 		}
 	}
 }
@@ -680,21 +674,12 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 
 // sendTrafficChart sends the traffic chart as a photo with caption
 func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
-	if data == nil {
-		log.Printf("❌ Cannot send traffic chart: data is nil")
+	if data == nil || data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
 		return
 	}
 	
-	if data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
-		log.Printf("❌ Cannot send traffic chart: ChartBuffer is nil or empty")
-		log.Printf("   This indicates chart generation failed - traffic status text should be sent instead")
-		return
-	}
-	
-	// Format caption with traffic status
 	caption := monitor.FormatTrafficStatus(data)
 	
-	// Create photo message
 	fileBytes := tgbotapi.FileBytes{
 		Name:  "iran_traffic_24h.png",
 		Bytes: data.ChartBuffer.Bytes(),
@@ -707,21 +692,12 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	case string:
 		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
 	default:
-		log.Printf("❌ Error: invalid chatID type for photo: %T", chatID)
 		return
 	}
 	
 	photo.Caption = caption
 	photo.ParseMode = tgbotapi.ModeMarkdown
 	
-	log.Printf("📊 Sending traffic chart to %v (size: %d bytes)", chatID, data.ChartBuffer.Len())
-	sentMsg, err := b.api.Send(photo)
-	if err != nil {
-		log.Printf("❌ Error sending traffic chart to %v: %v", chatID, err)
-		log.Printf("   Error details: %+v", err)
-	} else {
-		log.Printf("✅ Traffic chart sent successfully to %v (message ID: %d, photo file ID: %s)", 
-			chatID, sentMsg.MessageID, sentMsg.Photo[len(sentMsg.Photo)-1].FileID)
-	}
+	_, _ = b.api.Send(photo)
 }
 

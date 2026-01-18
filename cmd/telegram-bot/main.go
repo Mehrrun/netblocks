@@ -44,62 +44,17 @@ func main() {
 		}
 	}
 	
-	// Load Cloudflare credentials from environment variables (preferred for security)
-	// Supports both API Token (preferred) and API Key (legacy)
-	tokenFromEnv := os.Getenv("CLOUDFLARE_TOKEN")
-	emailFromEnv := os.Getenv("CLOUDFLARE_EMAIL")
-	keyFromEnv := os.Getenv("CLOUDFLARE_KEY")
-	
-	log.Println("🔍 Checking Cloudflare credentials...")
-	log.Printf("   CLOUDFLARE_TOKEN env exists: %v (length: %d)", tokenFromEnv != "", len(tokenFromEnv))
-	log.Printf("   CLOUDFLARE_EMAIL env exists: %v", emailFromEnv != "")
-	log.Printf("   CLOUDFLARE_KEY env exists: %v (length: %d)", keyFromEnv != "", len(keyFromEnv))
-	log.Printf("   Config.CloudflareToken before: %v (length: %d)", cfg.CloudflareToken != "", len(cfg.CloudflareToken))
-	
-	if tokenFromEnv != "" {
-		cfg.CloudflareToken = tokenFromEnv
-		log.Printf("✅ Cloudflare API Token loaded from CLOUDFLARE_TOKEN (length: %d chars)", len(tokenFromEnv))
-		// Show first 8 and last 4 chars for debugging (safely)
-		previewLen := 8
-		if len(tokenFromEnv) < previewLen {
-			previewLen = len(tokenFromEnv)
-		}
-		suffixLen := 4
-		if len(tokenFromEnv) < suffixLen {
-			suffixLen = len(tokenFromEnv)
-		}
-		if len(tokenFromEnv) > previewLen+suffixLen {
-			log.Printf("   Token preview: %s...%s", tokenFromEnv[:previewLen], tokenFromEnv[len(tokenFromEnv)-suffixLen:])
-		} else {
-			log.Printf("   Token preview: %s", tokenFromEnv)
-		}
-	} else {
-		log.Printf("⚠️  CLOUDFLARE_TOKEN environment variable is empty or not set")
+	// Load Cloudflare credentials from environment variables
+	if token := os.Getenv("CLOUDFLARE_TOKEN"); token != "" {
+		cfg.CloudflareToken = token
 	}
 	
-	// Remove legacy email/key checks - we only use token now
-	if emailFromEnv != "" {
-		log.Printf("⚠️  CLOUDFLARE_EMAIL is set but will be ignored (using token method)")
-	}
-	if keyFromEnv != "" {
-		log.Printf("⚠️  CLOUDFLARE_KEY is set but will be ignored (using token method)")
+	if email := os.Getenv("CLOUDFLARE_EMAIL"); email != "" {
+		cfg.CloudflareEmail = email
 	}
 	
-	// Warn if Cloudflare credentials are missing
-	if cfg.CloudflareToken == "" {
-		log.Println("⚠️  ========================================")
-		log.Println("⚠️  CLOUDFLARE CREDENTIALS NOT CONFIGURED")
-		log.Println("⚠️  ========================================")
-		log.Println("⚠️  Traffic charts will NOT be available.")
-		log.Println("⚠️  Set CLOUDFLARE_TOKEN environment variable")
-		log.Println("⚠️  ========================================")
-	} else {
-		log.Println("✅ ========================================")
-		log.Println("✅ CLOUDFLARE CREDENTIALS CONFIGURED")
-		log.Println("✅ Traffic monitoring ENABLED")
-		log.Println("✅ Using API Token authentication (recommended)")
-		log.Printf("✅ Token length: %d characters", len(cfg.CloudflareToken))
-		log.Println("✅ ========================================")
+	if key := os.Getenv("CLOUDFLARE_KEY"); key != "" {
+		cfg.CloudflareKey = key
 	}
 
 	// Create monitor
