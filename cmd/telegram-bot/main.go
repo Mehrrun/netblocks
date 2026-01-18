@@ -48,26 +48,38 @@ func main() {
 	// Supports both API Token (preferred) and API Key (legacy)
 	if token := os.Getenv("CLOUDFLARE_TOKEN"); token != "" {
 		cfg.CloudflareToken = token
-		log.Println("✓ Cloudflare API Token loaded from CLOUDFLARE_TOKEN environment variable")
+		log.Printf("✅ Cloudflare API Token loaded from CLOUDFLARE_TOKEN (length: %d chars)", len(token))
 	}
 	
 	if email := os.Getenv("CLOUDFLARE_EMAIL"); email != "" {
 		cfg.CloudflareEmail = email
-		log.Println("✓ Cloudflare email loaded from CLOUDFLARE_EMAIL environment variable")
+		log.Printf("✅ Cloudflare email loaded from CLOUDFLARE_EMAIL: %s", email)
 	}
 	
 	if key := os.Getenv("CLOUDFLARE_KEY"); key != "" {
 		cfg.CloudflareKey = key
-		log.Println("✓ Cloudflare API key loaded from CLOUDFLARE_KEY environment variable")
+		log.Printf("✅ Cloudflare API key loaded from CLOUDFLARE_KEY (length: %d chars)", len(key))
 	}
 	
 	// Warn if Cloudflare credentials are missing
 	if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.CloudflareKey == "") {
-		log.Println("⚠️  Cloudflare credentials not configured. Traffic charts will not be available.")
-		log.Println("   Set CLOUDFLARE_TOKEN environment variable (recommended)")
-		log.Println("   OR set CLOUDFLARE_EMAIL and CLOUDFLARE_KEY (legacy method)")
+		log.Println("⚠️  ========================================")
+		log.Println("⚠️  CLOUDFLARE CREDENTIALS NOT CONFIGURED")
+		log.Println("⚠️  ========================================")
+		log.Println("⚠️  Traffic charts will NOT be available.")
+		log.Println("⚠️  Set CLOUDFLARE_TOKEN environment variable (recommended)")
+		log.Println("⚠️  OR set CLOUDFLARE_EMAIL and CLOUDFLARE_KEY (legacy method)")
+		log.Println("⚠️  ========================================")
 	} else {
-		log.Println("✓ Cloudflare credentials configured - traffic monitoring enabled")
+		log.Println("✅ ========================================")
+		log.Println("✅ CLOUDFLARE CREDENTIALS CONFIGURED")
+		log.Println("✅ Traffic monitoring ENABLED")
+		if cfg.CloudflareToken != "" {
+			log.Println("✅ Using API Token authentication (recommended)")
+		} else {
+			log.Println("✅ Using API Key authentication (legacy)")
+		}
+		log.Println("✅ ========================================")
 	}
 
 	// Create monitor

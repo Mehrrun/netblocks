@@ -109,16 +109,20 @@ func (m *Monitor) updateResults(ctx context.Context) {
 	// Get traffic data (will use cache if fresh)
 	trafficData, err := m.trafficMonitor.GetTrafficData(ctx)
 	if err != nil {
-		log.Printf("Warning: Failed to get traffic data: %v", err)
+		log.Printf("⚠️  Failed to get traffic data: %v", err)
+		log.Printf("   Traffic charts will not be available in this update")
 		trafficData = nil
 	}
 	
 	// Generate chart if we have traffic data
 	var trafficModelData *models.TrafficData
 	if trafficData != nil {
+		log.Printf("📊 Generating traffic chart...")
 		chartBuffer, err := GenerateTrafficChart(trafficData)
 		if err != nil {
-			log.Printf("Warning: Failed to generate traffic chart: %v", err)
+			log.Printf("⚠️  Failed to generate traffic chart: %v", err)
+		} else {
+			log.Printf("✅ Traffic chart generated successfully (size: %d bytes)", chartBuffer.Len())
 		}
 		
 		// Convert to models.TrafficData
@@ -132,6 +136,8 @@ func (m *Monitor) updateResults(ctx context.Context) {
 			ChartBuffer:   chartBuffer,
 			LastUpdate:    trafficData.LastUpdate,
 		}
+	} else {
+		log.Printf("⚠️  No traffic data available - skipping chart generation")
 	}
 
 	m.results = &models.MonitoringResult{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -82,6 +83,8 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	// Cloudflare Radar API endpoint for Iran HTTP traffic
 	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth?location=IR&dateRange=24h&aggInterval=1h"
 
+	log.Printf("📡 Fetching traffic data from Cloudflare Radar API: %s", url)
+	
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -91,47 +94,71 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	
 	// Add Cloudflare authentication headers
 	// Prefer API Token (Bearer) over API Key (X-Auth-Email/X-Auth-Key)
+	authMethod := "none"
 	if tm.cloudflareToken != "" {
 		// Use API Token (recommended)
 		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+		authMethod = "Bearer token"
+		log.Printf("🔑 Using Cloudflare API Token authentication (token length: %d chars)", len(tm.cloudflareToken))
 	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
 		// Fallback to legacy API Key method
 		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
 		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
+		authMethod = "API Key"
+		log.Printf("🔑 Using legacy Cloudflare API Key authentication (email: %s)", tm.cloudflareEmail)
+	} else {
+		log.Printf("⚠️  No Cloudflare credentials provided - API call will fail")
 	}
 
 	resp, err := tm.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch data: %w", err)
+		return nil, fmt.Errorf("failed to fetch data (auth: %s): %w", authMethod, err)
 	}
 	defer resp.Body.Close()
+
+	log.Printf("📊 Cloudflare API response: Status %d (%s)", resp.StatusCode, resp.Status)
 
 	if resp.StatusCode != http.StatusOK {
 		// Try to read error response
 		var apiResp CloudflareRadarResponse
-		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err == nil && len(apiResp.Errors) > 0 {
-			return nil, fmt.Errorf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+		decodeErr := json.NewDecoder(resp.Body).Decode(&apiResp)
+		if decodeErr == nil && len(apiResp.Errors) > 0 {
+			errMsg := fmt.Sprintf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+			log.Printf("❌ Cloudflare API error: %s", errMsg)
+			return nil, fmt.Errorf(errMsg)
 		}
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		errMsg := fmt.Sprintf("API returned status %d (auth method: %s)", resp.StatusCode, authMethod)
+		log.Printf("❌ %s", errMsg)
+		return nil, fmt.Errorf(errMsg)
 	}
 
 	var apiResp CloudflareRadarResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		log.Printf("❌ Failed to decode JSON response: %v", err)
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if !apiResp.Success {
 		if len(apiResp.Errors) > 0 {
-			return nil, fmt.Errorf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+			errMsg := fmt.Sprintf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+			log.Printf("❌ Cloudflare API returned success=false: %s", errMsg)
+			return nil, fmt.Errorf(errMsg)
 		}
+		log.Printf("❌ Cloudflare API returned success=false (no error details)")
 		return nil, fmt.Errorf("API request was not successful")
 	}
+
+	log.Printf("✅ Cloudflare API call successful - processing data (data points: %d)", len(apiResp.Result.Serie0.Values))
 
 	// Process the data
 	data, err := tm.processData(&apiResp)
 	if err != nil {
+		log.Printf("❌ Failed to process traffic data: %v", err)
 		return nil, err
 	}
+
+	log.Printf("✅ Traffic data processed successfully - Level: %.1f%%, Status: %s %s", 
+		data.CurrentLevel, data.StatusEmoji, data.Status)
 
 	// Cache the data
 	tm.mu.Lock()
