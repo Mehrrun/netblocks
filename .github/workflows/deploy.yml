@@ -367,9 +367,32 @@ jobs:
             else
               echo ""
               echo "⚠️  No API calls found in logs - bot may not be attempting Cloudflare API calls yet"
+              echo ""
+              echo "  Possible reasons:"
+              echo "  1. Bot is still initializing (PerformInitialCheck may not have run yet)"
+              echo "  2. Bot.log file may not have been flushed yet"
+              echo "  3. FetchFromCloudflare may not be getting called"
+              echo ""
+              echo "  Checking bot.log for any Cloudflare-related activity..."
+              if [ -f bot.log ]; then
+                echo "  Searching for 'Cloudflare' or 'radar' in bot.log:"
+                grep -i "cloudflare\|radar" bot.log 2>/dev/null | head -20 || echo "    (No matches found)"
+                echo ""
+                echo "  Searching for 'Fetching' or 'traffic' in bot.log:"
+                grep -i "fetching\|traffic" bot.log 2>/dev/null | head -10 || echo "    (No matches found)"
+                echo ""
+                echo "  Total lines in bot.log: $(wc -l < bot.log)"
+                echo "  Last 10 lines of bot.log:"
+                tail -10 bot.log | while read line; do
+                  echo "    $line"
+                done
+              fi
             fi
             
+            echo ""
+            echo "=========================================="
             echo "--- End Diagnostic Information ---"
+            echo "=========================================="
           fi
           
           echo ""
