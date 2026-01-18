@@ -210,6 +210,15 @@ func min(a, b int) int {
 	return b
 }
 
+// getKeys returns all keys from a map (for debugging)
+func getKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // getDefaultData returns default traffic data (1% connection) when API fails
 func (tm *TrafficMonitor) getDefaultData() *TrafficData {
 	// Generate 24 hours of data points with 1% connection
