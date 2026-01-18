@@ -45,6 +45,12 @@ func main() {
 	}
 	
 	// Load Cloudflare credentials from environment variables (preferred for security)
+	// Supports both API Token (preferred) and API Key (legacy)
+	if token := os.Getenv("CLOUDFLARE_TOKEN"); token != "" {
+		cfg.CloudflareToken = token
+		log.Println("✓ Cloudflare API Token loaded from CLOUDFLARE_TOKEN environment variable")
+	}
+	
 	if email := os.Getenv("CLOUDFLARE_EMAIL"); email != "" {
 		cfg.CloudflareEmail = email
 		log.Println("✓ Cloudflare email loaded from CLOUDFLARE_EMAIL environment variable")
@@ -56,9 +62,10 @@ func main() {
 	}
 	
 	// Warn if Cloudflare credentials are missing
-	if cfg.CloudflareEmail == "" || cfg.CloudflareKey == "" {
+	if cfg.CloudflareToken == "" && (cfg.CloudflareEmail == "" || cfg.CloudflareKey == "") {
 		log.Println("⚠️  Cloudflare credentials not configured. Traffic charts will not be available.")
-		log.Println("   Set CLOUDFLARE_EMAIL and CLOUDFLARE_KEY environment variables to enable traffic monitoring.")
+		log.Println("   Set CLOUDFLARE_TOKEN environment variable (recommended)")
+		log.Println("   OR set CLOUDFLARE_EMAIL and CLOUDFLARE_KEY (legacy method)")
 	} else {
 		log.Println("✓ Cloudflare credentials configured - traffic monitoring enabled")
 	}

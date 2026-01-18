@@ -40,7 +40,8 @@ func NewMonitor(cfg *config.Config) (*Monitor, error) {
 	dnsMonitor := NewDNSMonitor(cfg.DNSServers, 8*time.Second)
 
 	// Initialize Traffic monitor with Cloudflare credentials
-	trafficMonitor := NewTrafficMonitor(cfg.CloudflareEmail, cfg.CloudflareKey)
+	// Supports both API Token (preferred) and API Key (legacy)
+	trafficMonitor := NewTrafficMonitor(cfg.CloudflareToken, cfg.CloudflareEmail, cfg.CloudflareKey)
 
 	return &Monitor{
 		bgpClient:      bgpClient,

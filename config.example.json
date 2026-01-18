@@ -3,8 +3,7 @@
   "telegram_channel": "@YourChannelUsername",
   "interval": "10m",
   "ris_live_url": "wss://ris-live.ripe.net/v1/ws/?client=netblocks",
-  "cloudflare_email": "your-email@example.com",
-  "cloudflare_key": "your-cloudflare-api-key-here",
+  "cloudflare_token": "your-cloudflare-api-token-here",
   "dns_servers": [],
   "iran_asns": []
 }

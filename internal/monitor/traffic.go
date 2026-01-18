@@ -11,13 +11,14 @@ import (
 
 // TrafficMonitor monitors Iran's internet traffic using Cloudflare Radar API
 type TrafficMonitor struct {
-	client          *http.Client
-	lastUpdate      time.Time
-	cachedData      *TrafficData
-	mu              sync.RWMutex
-	baseline        float64
-	cloudflareEmail string
-	cloudflareKey   string
+	client           *http.Client
+	lastUpdate       time.Time
+	cachedData       *TrafficData
+	mu               sync.RWMutex
+	baseline         float64
+	cloudflareToken  string  // API Token (preferred)
+	cloudflareEmail  string  // Legacy: API Key email
+	cloudflareKey    string  // Legacy: API Key
 }
 
 // TrafficData represents Iran's internet traffic statistics
@@ -47,12 +48,15 @@ type CloudflareRadarResponse struct {
 }
 
 // NewTrafficMonitor creates a new traffic monitor
-func NewTrafficMonitor(cloudflareEmail, cloudflareKey string) *TrafficMonitor {
+// Accepts either API Token (cloudflareToken) or API Key (cloudflareEmail + cloudflareKey)
+// API Token is preferred for security
+func NewTrafficMonitor(cloudflareToken, cloudflareEmail, cloudflareKey string) *TrafficMonitor {
 	return &TrafficMonitor{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 		baseline:        100.0, // Will be calculated from data
+		cloudflareToken: cloudflareToken,
 		cloudflareEmail: cloudflareEmail,
 		cloudflareKey:   cloudflareKey,
 	}
@@ -85,8 +89,13 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 
 	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
 	
-	// Add Cloudflare authentication headers if provided
-	if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
+	// Add Cloudflare authentication headers
+	// Prefer API Token (Bearer) over API Key (X-Auth-Email/X-Auth-Key)
+	if tm.cloudflareToken != "" {
+		// Use API Token (recommended)
+		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
+		// Fallback to legacy API Key method
 		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
 		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
 	}

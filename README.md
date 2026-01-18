@@ -92,13 +92,19 @@ Create a `config.json` file in the project root (optional - defaults will be use
 
 **Optional:**
 - `TELEGRAM_CHANNEL`: Telegram channel username for updates (e.g., @YourChannel)
-- `CLOUDFLARE_EMAIL`: Cloudflare account email (for traffic monitoring)
-- `CLOUDFLARE_KEY`: Cloudflare API key (for traffic monitoring)
+- `CLOUDFLARE_TOKEN`: Cloudflare API Token with Radar Read permission (recommended)
+- `CLOUDFLARE_EMAIL` + `CLOUDFLARE_KEY`: Legacy Cloudflare API Key method (alternative)
 
 **For GitHub Actions deployment**, set these as repository secrets:
 1. Go to your repo → Settings → Secrets and variables → Actions
 2. Click "New repository secret"
-3. Add: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL`, `CLOUDFLARE_EMAIL`, `CLOUDFLARE_KEY`
+3. Add required secrets:
+   - `TELEGRAM_BOT_TOKEN` (required)
+   - `TELEGRAM_CHANNEL` (optional)
+   - `CLOUDFLARE_TOKEN` (recommended for traffic charts)
+
+**Note**: Use `CLOUDFLARE_TOKEN` (API Token) instead of `CLOUDFLARE_EMAIL`/`CLOUDFLARE_KEY` (API Key).
+API Tokens are more secure and the recommended method.
 
 ## Usage
 
@@ -446,19 +452,23 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 
 Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare.com/radar/) for Iran's internet traffic data:
 - Endpoint: `https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth`
-- Requires authentication: Cloudflare email + API key
-- Get your API key from: https://dash.cloudflare.com/profile/api-tokens
+- **Authentication**: API Token with "Radar Read" permission (recommended)
+- Get your API Token: https://dash.cloudflare.com/profile/api-tokens
+  1. Click "Create Token"
+  2. Use "Create Custom Token"
+  3. Add permission: **Account → Radar → Read**
+  4. Click "Continue to summary" → "Create Token"
+  5. Copy the token
 - 24-hour historical data with 1-hour aggregation intervals
 - Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
 
 **Configuration (Recommended for GitHub):**
-Set credentials as environment variables:
+Set token as environment variable:
 ```bash
-export CLOUDFLARE_EMAIL="your-email@example.com"
-export CLOUDFLARE_KEY="your-api-key"
+export CLOUDFLARE_TOKEN="your-api-token-here"
 ```
 
-Or add to GitHub Secrets for automated deployment (see Environment Variables section above).
+Or add `CLOUDFLARE_TOKEN` to GitHub Secrets for automated deployment.
 
 ## Output Format
 
