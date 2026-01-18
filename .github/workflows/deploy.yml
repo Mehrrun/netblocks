@@ -104,50 +104,95 @@ jobs:
         echo "📢 Sending updates to Telegram channel every 10 minutes"
         echo ""
         
-        # Print Cloudflare authentication status
+        # Print Cloudflare authentication status from bot logs
         echo "=========================================="
         echo "🔑 Cloudflare Authentication Status:"
         echo "=========================================="
-        if [ -n "${{ secrets.CLOUDFLARE_TOKEN }}" ]; then
-          TOKEN_LEN=${#CLOUDFLARE_TOKEN}
-          echo "✅ CLOUDFLARE_TOKEN is set (length: $TOKEN_LEN characters)"
-          if [ $TOKEN_LEN -gt 0 ]; then
-            echo "✅ Token is non-empty"
+        
+        # Check if token was passed to bot (from bot logs)
+        if [ -f bot.log ]; then
+          if grep -q "NewTrafficMonitor: token set=true" bot.log 2>/dev/null; then
+            TOKEN_LINE=$(grep "NewTrafficMonitor: token set=true" bot.log | tail -1)
+            echo "✅ Bot process received Cloudflare token"
+            echo "   $TOKEN_LINE"
+            
+            # Extract token length if available
+            if echo "$TOKEN_LINE" | grep -q "len="; then
+              TOKEN_LEN=$(echo "$TOKEN_LINE" | sed -n 's/.*len=\([0-9]*\).*/\1/p')
+              echo "   Token length: $TOKEN_LEN characters"
+            fi
+          elif grep -q "NewTrafficMonitor: token set=false" bot.log 2>/dev/null; then
+            echo "❌ Bot process did NOT receive Cloudflare token"
+            echo "   Check if CLOUDFLARE_TOKEN secret is set in repository settings"
           else
-            echo "❌ Token is empty!"
+            echo "⏳ Waiting for bot to initialize and check token..."
+            echo "   Will check again on next iteration"
+          fi
+          
+          # Check authentication method used
+          if grep -q "Using Cloudflare Bearer Token authentication" bot.log 2>/dev/null; then
+            AUTH_LINE=$(grep "Using Cloudflare Bearer Token authentication" bot.log | tail -1)
+            echo "✅ Authentication method: Bearer Token"
+            if echo "$AUTH_LINE" | grep -q "token length:"; then
+              echo "   $AUTH_LINE"
+            fi
+          elif grep -q "Using Cloudflare API Key authentication" bot.log 2>/dev/null; then
+            AUTH_LINE=$(grep "Using Cloudflare API Key authentication" bot.log | tail -1)
+            echo "⚠️  Authentication method: API Key (legacy)"
+            echo "   $AUTH_LINE"
+          elif grep -q "WARNING: No Cloudflare credentials available" bot.log 2>/dev/null; then
+            echo "❌ No Cloudflare credentials available"
+            echo "   Set CLOUDFLARE_TOKEN secret in repository settings"
+          fi
+          
+          # Check for Cloudflare API responses
+          if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+            echo ""
+            echo "📡 Recent Cloudflare API responses:"
+            grep "Cloudflare API response: Status" bot.log | tail -3 | while read line; do
+              echo "   $line"
+            done
+            
+            # Check for successful responses
+            if grep -q "Cloudflare API response: Status 200" bot.log 2>/dev/null; then
+              echo "   ✅ API calls are succeeding (Status 200)"
+            fi
+            
+            # Check for authentication errors
+            if grep -q "Cloudflare API response: Status 401" bot.log 2>/dev/null; then
+              echo "   ❌ Authentication failed (Status 401) - Token may be invalid"
+              ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 401" bot.log | grep "Cloudflare API error" | tail -1)
+              if [ -n "$ERROR_MSG" ]; then
+                echo "   $ERROR_MSG"
+              fi
+            fi
+            
+            if grep -q "Cloudflare API response: Status 403" bot.log 2>/dev/null; then
+              echo "   ❌ Permission denied (Status 403) - Token lacks Radar permission"
+              ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 403" bot.log | grep "Cloudflare API error" | tail -1)
+              if [ -n "$ERROR_MSG" ]; then
+                echo "   $ERROR_MSG"
+              fi
+            fi
+          fi
+          
+          # Check for Cloudflare API errors
+          if grep -qi "Cloudflare API error" bot.log 2>/dev/null; then
+            echo ""
+            echo "⚠️  Cloudflare API errors found:"
+            grep -i "Cloudflare API error" bot.log | tail -3 | while read line; do
+              echo "   $line"
+            done
+          fi
+          
+          # Check for successful API calls
+          if grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
+            SUCCESS_LINE=$(grep "Cloudflare API success - received" bot.log | tail -1)
+            echo ""
+            echo "✅ $SUCCESS_LINE"
           fi
         else
-          echo "❌ CLOUDFLARE_TOKEN secret is not set"
-        fi
-        
-        # Check if token is passed to bot process
-        if grep -q "NewTrafficMonitor: token set=true" bot.log 2>/dev/null; then
-          echo "✅ Bot process received Cloudflare token"
-          grep "NewTrafficMonitor: token" bot.log | tail -1 || true
-        elif grep -q "NewTrafficMonitor: token set=false" bot.log 2>/dev/null; then
-          echo "❌ Bot process did NOT receive Cloudflare token"
-        else
-          echo "⏳ Waiting for bot to initialize and check token..."
-        fi
-        
-        # Check for Cloudflare API authentication logs
-        if grep -q "Using Cloudflare Bearer Token authentication" bot.log 2>/dev/null; then
-          echo "✅ Bot is using Cloudflare Bearer Token authentication"
-          grep "Using Cloudflare.*authentication" bot.log | tail -1 || true
-        fi
-        
-        # Check for Cloudflare API response
-        if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
-          echo ""
-          echo "📡 Recent Cloudflare API responses:"
-          grep "Cloudflare API response: Status" bot.log | tail -3 || true
-        fi
-        
-        # Check for Cloudflare errors
-        if grep -qi "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403\|WARNING: No Cloudflare credentials" bot.log 2>/dev/null; then
-          echo ""
-          echo "⚠️  Cloudflare warnings/errors found:"
-          grep -i "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403\|WARNING: No Cloudflare credentials" bot.log | tail -3 || true
+          echo "⏳ Bot log file not found yet, waiting for initialization..."
         fi
         
         echo "=========================================="
@@ -183,14 +228,24 @@ jobs:
             tail -30 bot.log | grep -v "^$" || echo "No recent activity"
             echo "--- End of recent activity ---"
             echo ""
-            echo "--- Cloudflare Status Check ---"
+            echo "--- Cloudflare Authentication Status ---"
             if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
               echo "Recent Cloudflare API responses:"
-              grep "Cloudflare API response: Status" bot.log | tail -3 || true
+              grep "Cloudflare API response: Status" bot.log | tail -3 | while read line; do
+                echo "  $line"
+              done || true
             fi
-            if grep -qi "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403" bot.log 2>/dev/null; then
+            if grep -qi "Cloudflare API error\|Cloudflare.*401\|Cloudflare.*403" bot.log 2>/dev/null; then
               echo "⚠️  Cloudflare errors:"
-              grep -i "Cloudflare.*error\|Cloudflare.*401\|Cloudflare.*403" bot.log | tail -3 || true
+              grep -i "Cloudflare API error\|Cloudflare.*401\|Cloudflare.*403" bot.log | tail -3 | while read line; do
+                echo "  $line"
+              done || true
+            fi
+            if grep -q "Cloudflare API success" bot.log 2>/dev/null; then
+              echo "✅ Recent successful API calls:"
+              grep "Cloudflare API success" bot.log | tail -2 | while read line; do
+                echo "  $line"
+              done || true
             fi
             echo "--- End Cloudflare Status ---"
             echo ""
