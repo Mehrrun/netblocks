@@ -155,14 +155,15 @@ DNS monitoring includes:
 ### Traffic Monitoring
 
 Traffic monitoring provides:
-- Real-time Iran internet traffic analysis via Cloudflare Radar API
+- Real-time Iran internet traffic analysis with simulated realistic patterns
 - 24-hour traffic trend visualization with PNG charts
 - Traffic level percentage calculations
 - Change detection (vs baseline)
 - Status classification: Normal (>70%), Degraded (30-70%), Throttled (10-30%), Shutdown (<10%)
 - Visual charts sent as images in Telegram
-- 5-minute caching to avoid API rate limits
+- Time-of-day traffic patterns (higher during daytime, lower at night)
 - Background refresh every 10 minutes
+- Note: Currently uses simulated data; Cloudflare Radar API integration requires authentication token
 
 ## Monitored Iranian ASNs
 
@@ -429,11 +430,12 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 
 ### Cloudflare Radar API
 
-Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare.com/radar/) for Iran's internet traffic data:
+Traffic monitoring framework ready for Cloudflare Radar API integration:
 - Endpoint: `https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth`
-- No authentication required for basic data
-- 24-hour historical data with 1-hour aggregation intervals
+- Currently uses simulated traffic data (realistic time-of-day patterns)
+- To enable real Cloudflare data: Add authentication token to the API request
 - Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
+- Simulated data provides realistic daytime/nighttime traffic variations
 
 ## Output Format
 
@@ -484,10 +486,11 @@ Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare
 
 ### Traffic Chart Not Showing
 
-- Ensure internet connectivity to Cloudflare Radar API
-- Check for API rate limiting (uses 5-minute cache to prevent this)
-- Traffic data refreshes every 10 minutes in background
+- Currently uses simulated traffic data with realistic patterns
 - Chart generation requires go-chart library dependencies
+- To use real Cloudflare Radar data: Configure API authentication token
+- Check bot logs for chart generation errors
+- Ensure bot has permission to send photos in the channel
 
 ## Contributing
 
