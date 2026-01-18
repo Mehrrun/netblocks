@@ -37,6 +37,12 @@ jobs:
         if [ -z "${{ secrets.TELEGRAM_CHANNEL }}" ]; then
           echo "Warning: TELEGRAM_CHANNEL secret not set"
         fi
+        if [ -z "${{ secrets.CLOUDFLARE_EMAIL }}" ]; then
+          echo "Warning: CLOUDFLARE_EMAIL secret not set - traffic charts will not be available"
+        fi
+        if [ -z "${{ secrets.CLOUDFLARE_KEY }}" ]; then
+          echo "Warning: CLOUDFLARE_KEY secret not set - traffic charts will not be available"
+        fi
         echo "✓ Secrets verified"
       
     - name: Build bot
@@ -49,6 +55,8 @@ jobs:
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+        CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+        CLOUDFLARE_KEY: ${{ secrets.CLOUDFLARE_KEY }}
       run: |
         nohup ./netblocks-telegram-bot > bot.log 2>&1 &
         BOT_PID=$!

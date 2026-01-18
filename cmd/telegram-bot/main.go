@@ -43,6 +43,25 @@ func main() {
 			log.Printf("✓ Telegram channel loaded from environment variable: %s", channel)
 		}
 	}
+	
+	// Load Cloudflare credentials from environment variables (preferred for security)
+	if email := os.Getenv("CLOUDFLARE_EMAIL"); email != "" {
+		cfg.CloudflareEmail = email
+		log.Println("✓ Cloudflare email loaded from CLOUDFLARE_EMAIL environment variable")
+	}
+	
+	if key := os.Getenv("CLOUDFLARE_KEY"); key != "" {
+		cfg.CloudflareKey = key
+		log.Println("✓ Cloudflare API key loaded from CLOUDFLARE_KEY environment variable")
+	}
+	
+	// Warn if Cloudflare credentials are missing
+	if cfg.CloudflareEmail == "" || cfg.CloudflareKey == "" {
+		log.Println("⚠️  Cloudflare credentials not configured. Traffic charts will not be available.")
+		log.Println("   Set CLOUDFLARE_EMAIL and CLOUDFLARE_KEY environment variables to enable traffic monitoring.")
+	} else {
+		log.Println("✓ Cloudflare credentials configured - traffic monitoring enabled")
+	}
 
 	// Create monitor
 	mon, err := monitor.NewMonitor(cfg)

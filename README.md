@@ -87,10 +87,18 @@ Create a `config.json` file in the project root (optional - defaults will be use
 
 ### Environment Variables
 
-- `TELEGRAM_BOT_TOKEN`: Telegram bot token (alternative to config file)
-- `TELEGRAM_CHANNEL`: Telegram channel username for updates
-- `CLOUDFLARE_EMAIL`: Cloudflare account email (for Radar API)
-- `CLOUDFLARE_KEY`: Cloudflare API key (for Radar API)
+**Required:**
+- `TELEGRAM_BOT_TOKEN`: Telegram bot token (from @BotFather)
+
+**Optional:**
+- `TELEGRAM_CHANNEL`: Telegram channel username for updates (e.g., @YourChannel)
+- `CLOUDFLARE_EMAIL`: Cloudflare account email (for traffic monitoring)
+- `CLOUDFLARE_KEY`: Cloudflare API key (for traffic monitoring)
+
+**For GitHub Actions deployment**, set these as repository secrets:
+1. Go to your repo → Settings → Secrets and variables → Actions
+2. Click "New repository secret"
+3. Add: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL`, `CLOUDFLARE_EMAIL`, `CLOUDFLARE_KEY`
 
 ## Usage
 
@@ -442,7 +450,15 @@ Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare
 - Get your API key from: https://dash.cloudflare.com/profile/api-tokens
 - 24-hour historical data with 1-hour aggregation intervals
 - Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
-- Set credentials in `config.json` or environment variables
+
+**Configuration (Recommended for GitHub):**
+Set credentials as environment variables:
+```bash
+export CLOUDFLARE_EMAIL="your-email@example.com"
+export CLOUDFLARE_KEY="your-api-key"
+```
+
+Or add to GitHub Secrets for automated deployment (see Environment Variables section above).
 
 ## Output Format
 
