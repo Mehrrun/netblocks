@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -311,6 +312,12 @@ func parseSerie(v interface{}) ([]string, []float64, bool) {
 				return ts, vals, true
 			}
 		}
+		// Some responses may use a map of named series
+		for _, item := range s {
+			if ts, vals, ok := parseSerie(item); ok {
+				return ts, vals, true
+			}
+		}
 		// If values exist but timestamps are missing, accept and generate timestamps later
 		if len(values) > 0 && len(timestamps) == 0 {
 			return nil, values, true
@@ -363,6 +370,11 @@ func toFloat(v interface{}) (float64, bool) {
 		return float64(n), true
 	case int64:
 		return float64(n), true
+	case string:
+		if f, err := strconv.ParseFloat(n, 64); err == nil {
+			return f, true
+		}
+		return 0, false
 	case json.Number:
 		f, err := n.Float64()
 		return f, err == nil
@@ -411,8 +423,8 @@ func parseSeriesPairs(v interface{}) ([]string, []float64, bool) {
 				values = append(values, val)
 			}
 		case map[string]interface{}:
-			ts, okTs := normalizeTimestamp(row["timestamp"])
-			val, okVal := toFloat(row["value"])
+			ts, okTs := normalizeTimestamp(firstOf(row, "timestamp", "ts", "date", "datetime", "time"))
+			val, okVal := toFloat(firstOf(row, "value", "val", "y"))
 			if okTs && okVal {
 				timestamps = append(timestamps, ts)
 				values = append(values, val)
@@ -425,6 +437,15 @@ func parseSeriesPairs(v interface{}) ([]string, []float64, bool) {
 	}
 
 	return timestamps, values, true
+}
+
+func firstOf(m map[string]interface{}, keys ...string) interface{} {
+	for _, key := range keys {
+		if v, ok := m[key]; ok {
+			return v
+		}
+	}
+	return nil
 }
 
 func sliceLast24(timestamps []string, values []float64) ([]string, []float64) {

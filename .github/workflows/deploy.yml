@@ -41,7 +41,7 @@ jobs:
           echo "Warning: CLOUDFLARE_TOKEN not set - traffic charts will not be available"
         fi
         echo "✓ Secrets verified"
-      
+
     - name: Build bot
       run: |
         go build -o netblocks-telegram-bot ./cmd/telegram-bot
