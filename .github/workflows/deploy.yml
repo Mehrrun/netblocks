@@ -267,6 +267,10 @@ jobs:
           fi
           
           # ALWAYS show diagnostic information section when NOT CONNECTED
+          # Debug: Show API_CONNECTED value
+          echo ""
+          echo "Debug: API_CONNECTED value is '$API_CONNECTED'"
+          
           # Use != "true" to catch false, empty, or any other value
           if [ "$API_CONNECTED" != "true" ]; then
             echo ""
