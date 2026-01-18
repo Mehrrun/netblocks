@@ -87,9 +87,9 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	// Request 7d to maximize data availability, then slice last 24h locally.
 	// The correct endpoint is /radar/http/timeseries (NOT timeseries_groups).
 	// dateRange: valid values are "1d", "7d", "14d", "24h", etc.
-	// location: IR for Iran
+	// location: IR for Iran (fallback to IRN if IR returns no data)
 	// aggInterval: aggregation interval like "1h", "1d", etc.
-	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IR&dateRange=7d&aggInterval=1h"
+	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IR&dateRange=7d&aggInterval=1h&format=json"
 
 	log.Printf("Fetching Cloudflare Radar data from: %s", url)
 
@@ -173,6 +173,14 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 
 	timestamps, values, found := extractSeries(apiResp.Result)
 	if !found || len(values) == 0 {
+		// Retry with IRN location (some Radar datasets use ISO3)
+		retryURL := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IRN&dateRange=7d&aggInterval=1h&format=json"
+		log.Printf("Cloudflare API returned empty data for IR, retrying with IRN: %s", retryURL)
+		retryData, ok := tm.fetchWithURL(ctx, retryURL)
+		if ok {
+			return retryData, nil
+		}
+
 		log.Printf("Cloudflare API returned empty or unrecognized data structure")
 		log.Printf("Full response body (first 2000 chars): %s", string(bodyBytes[:min(2000, len(bodyBytes))]))
 		return tm.getDefaultData(), nil
@@ -229,11 +237,17 @@ type radarResult struct {
 	Series    []radarSerie `json:"series"`
 	Data      *radarSerie  `json:"data"`
 	Timeseries []radarSerie `json:"timeseries"`
+	// Some responses return timestamps/values directly under result
+	Timestamps []string  `json:"timestamps"`
+	Values     []float64 `json:"values"`
 }
 
 func extractSeries(resultRaw json.RawMessage) ([]string, []float64, bool) {
 	var rr radarResult
 	if err := json.Unmarshal(resultRaw, &rr); err == nil {
+		if len(rr.Values) > 0 && len(rr.Timestamps) > 0 {
+			return rr.Timestamps, rr.Values, true
+		}
 		if rr.Serie0 != nil && len(rr.Serie0.Values) > 0 {
 			return rr.Serie0.Timestamps, rr.Serie0.Values, true
 		}
@@ -251,14 +265,26 @@ func extractSeries(resultRaw json.RawMessage) ([]string, []float64, bool) {
 		}
 	}
 
+	// Try direct serie object at result root
+	var direct radarSerie
+	if err := json.Unmarshal(resultRaw, &direct); err == nil && len(direct.Values) > 0 {
+		return direct.Timestamps, direct.Values, true
+	}
+
 	var raw map[string]interface{}
 	if json.Unmarshal(resultRaw, &raw) != nil {
 		return nil, nil, false
 	}
 
 	// Try common keys in generic map
-	for _, key := range []string{"serie_0", "serie0", "series", "data", "timeseries"} {
+	for _, key := range []string{"timestamps", "values", "serie_0", "serie0", "series", "data", "timeseries"} {
 		if v, ok := raw[key]; ok {
+			if key == "timestamps" || key == "values" {
+				// If timestamps/values are at the root, parse as map
+				if ts, vals, ok := parseSerie(raw); ok {
+					return ts, vals, true
+				}
+			}
 			if ts, vals, ok := parseSerie(v); ok {
 				return ts, vals, true
 			}
@@ -406,6 +432,53 @@ func sliceLast24(timestamps []string, values []float64) ([]string, []float64) {
 		return timestamps[start:], values[start:]
 	}
 	return timestamps, values[start:]
+}
+
+// fetchWithURL fetches and parses Radar data using a specific URL.
+// Returns data and true if successful, otherwise nil,false.
+func (tm *TrafficMonitor) fetchWithURL(ctx context.Context, url string) (*TrafficData, bool) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, false
+	}
+	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
+	if tm.cloudflareToken != "" {
+		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
+		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
+		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
+	}
+
+	resp, err := tm.client.Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false
+	}
+
+	var apiResp CloudflareRadarResponse
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil || !apiResp.Success {
+		return nil, false
+	}
+
+	ts, vals, found := extractSeries(apiResp.Result)
+	if !found || len(vals) == 0 {
+		return nil, false
+	}
+
+	ts, vals = sliceLast24(ts, vals)
+	data, err := tm.processData(vals, ts)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
 }
 
 // getDefaultData returns default traffic data (1% connection) when API fails
