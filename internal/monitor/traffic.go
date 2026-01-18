@@ -276,6 +276,15 @@ func parseSerie(v interface{}) ([]string, []float64, bool) {
 		if len(values) > 0 && len(timestamps) > 0 {
 			return timestamps, values, true
 		}
+		// Some responses may use "value" or "data" with pairs/objects
+		if len(values) == 0 {
+			values = toFloatSlice(s["value"])
+		}
+		if len(values) == 0 {
+			if ts, vals, ok := parseSeriesPairs(s["data"]); ok {
+				return ts, vals, true
+			}
+		}
 	case []interface{}:
 		if len(s) > 0 {
 			return parseSerie(s[0])
@@ -293,6 +302,10 @@ func toStringSlice(v interface{}) []string {
 	for _, item := range raw {
 		if s, ok := item.(string); ok {
 			out = append(out, s)
+			continue
+		}
+		if ts, ok := normalizeTimestamp(item); ok {
+			out = append(out, ts)
 		}
 	}
 	return out
@@ -326,6 +339,62 @@ func toFloat(v interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func normalizeTimestamp(v interface{}) (string, bool) {
+	switch t := v.(type) {
+	case string:
+		return t, true
+	case float64:
+		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339), true
+	case int:
+		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339), true
+	case int64:
+		return time.Unix(t, 0).UTC().Format(time.RFC3339), true
+	case json.Number:
+		if f, err := t.Float64(); err == nil {
+			return time.Unix(int64(f), 0).UTC().Format(time.RFC3339), true
+		}
+	}
+	return "", false
+}
+
+func parseSeriesPairs(v interface{}) ([]string, []float64, bool) {
+	raw, ok := v.([]interface{})
+	if !ok || len(raw) == 0 {
+		return nil, nil, false
+	}
+
+	timestamps := make([]string, 0, len(raw))
+	values := make([]float64, 0, len(raw))
+
+	for _, item := range raw {
+		switch row := item.(type) {
+		case []interface{}:
+			if len(row) < 2 {
+				continue
+			}
+			ts, okTs := normalizeTimestamp(row[0])
+			val, okVal := toFloat(row[1])
+			if okTs && okVal {
+				timestamps = append(timestamps, ts)
+				values = append(values, val)
+			}
+		case map[string]interface{}:
+			ts, okTs := normalizeTimestamp(row["timestamp"])
+			val, okVal := toFloat(row["value"])
+			if okTs && okVal {
+				timestamps = append(timestamps, ts)
+				values = append(values, val)
+			}
+		}
+	}
+
+	if len(values) == 0 || len(timestamps) == 0 {
+		return nil, nil, false
+	}
+
+	return timestamps, values, true
 }
 
 func sliceLast24(timestamps []string, values []float64) ([]string, []float64) {
