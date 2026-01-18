@@ -595,6 +595,28 @@ func GetDefaultIranianASNs() []string {
 		// Iranian Data Center (KEYANA Information Technology Co. Ltd.)
 		"AS57067", // Iranian Data Center - Datacenter services
 
+		// ============================================
+		// CROSS-BORDER / SUSPICIOUS ASNs
+		// ASNs registered outside Iran (Iraq, UAE) but physically operating in Iran
+		// or serving Iranian/Iraqi networks with ambiguous infrastructure location
+		// ============================================
+
+		// Iraq-Registered ASNs (DMCC = Dubai Multi Commodities Centre)
+		"AS199739", // Earthlink-DMCC-IQ - Iraq registered, suspected Iran operations
+		"AS50710",  // Earthlink Telecommunications - Iraq ISP with Iran presence
+		"AS59692",  // IQWeb FZ-LLC - Iraq web hosting, suspected Iran infrastructure
+		"AS203214", // Hulum Almustakbal - Iraq registered
+
+		// UAE-Registered ASNs Operating with Iranian Networks
+		"AS57568",  // ARVANCLOUD GLOBAL - Arvan Cloud's global/UAE infrastructure
+		"AS208800", // G42 CLOUD - UAE cloud provider with Iran presence
+		"AS41268",  // Sesameware FZ-LLC - UAE registered, Iran operations
+		"AS60924",  // Orixcom DMCC - UAE registered, suspected Iran infrastructure
+		"AS198398", // Symphony Solutions FZ-LLC - UAE, imports BGP from Iran (confirmed)
+
+		// Historical Cross-Border Registration Issues
+		"AS41152", // Ertebatat Fara Gostar - Historical UAE registration, now Iran
+
 		// Additional regional ISPs and networks
 		// Note: Many organizations may have additional ASNs for subsidiaries,
 		// regional operations, or specific services that are not publicly well-documented.

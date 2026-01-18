@@ -150,7 +150,7 @@ DNS monitoring includes:
 
 ## Monitored Iranian ASNs
 
-The tool monitors **40 Iranian ASNs** including:
+The tool monitors **50 ASNs** including **40 Iranian ASNs** and **10 Cross-Border/Suspicious ASNs**:
 
 ### Mobile Operators
 - **AS197207** - MCCI (Hamrah-e Avval)
@@ -207,6 +207,30 @@ The tool monitors **40 Iranian ASNs** including:
 ### Academic & Research Networks
 - **AS6736** - IPM (Institute for Research in Fundamental Sciences)
 - **AS25306** - IsIran
+
+### Cross-Border / Suspicious ASNs
+
+**Note on Cross-Border ASNs**: These ASNs are registered in Iraq or UAE but show routing behavior suggesting physical infrastructure in Iran, or serve as transit points for Iranian traffic. Monitoring them provides insight into:
+- Cross-border network operations
+- Traffic routing during internet shutdowns
+- Infrastructure masking or jurisdiction shopping
+- BGP behavior during censorship events
+
+#### Iraq-Registered
+- **AS199739** - Earthlink-DMCC-IQ
+- **AS50710** - Earthlink Telecommunications
+- **AS59692** - IQWeb FZ-LLC
+- **AS203214** - Hulum Almustakbal
+
+#### UAE-Registered
+- **AS57568** - ARVANCLOUD GLOBAL (Arvan Cloud Global Infrastructure)
+- **AS208800** - G42 CLOUD
+- **AS41268** - Sesameware FZ-LLC
+- **AS60924** - Orixcom DMCC
+- **AS198398** - Symphony Solutions FZ-LLC
+
+#### Historical Registration Issues
+- **AS41152** - Ertebatat Fara Gostar Shargh PJSC
 
 ## Monitored DNS Servers
 
