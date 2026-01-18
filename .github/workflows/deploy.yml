@@ -1,4 +1,4 @@
-name: Run Bot Continuously
+name: Run Bot 24/7
 
 on:
   push:
@@ -9,22 +9,19 @@ on:
       - 'internal/**'
       - 'go.mod'
       - 'go.sum'
-      - '.trigger'
   workflow_dispatch:
 
 permissions:
-  contents: write  # Allow workflow to push .trigger file
+  contents: read
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 350  # 5 hours 50 minutes (before 6-hour limit)
+    timeout-minutes: 525600  # 1 year (maximum allowed)
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -71,6 +68,13 @@ jobs:
             echo ""
             echo "Recent logs:"
             tail -20 bot.log
+            echo ""
+            echo "============================================"
+            echo "Bot started successfully!"
+            echo "Channel: ${{ secrets.TELEGRAM_CHANNEL }}"
+            echo "Entering monitoring mode..."
+            echo "This workflow will run forever (never complete)"
+            echo "============================================"
           else
             echo "✗ Bot process not found"
             echo ""
@@ -83,67 +87,51 @@ jobs:
           exit 1
         fi
     
-    - name: Run for 5 hours 45 minutes
+    - name: Monitor bot forever
       run: |
-        echo "Bot will run for 5 hours 45 minutes, then auto-restart..."
         BOT_PID=$(cat bot.pid)
+        COUNTER=1
         
-        # Run for 5 hours 45 minutes (20700 seconds)
-        for i in {1..138}; do
+        echo ""
+        echo "🤖 NetBlocks Bot is now running 24/7"
+        echo "📊 Monitoring Iranian ASNs and DNS servers"
+        echo "📢 Sending updates to Telegram channel every 10 minutes"
+        echo ""
+        echo "This workflow will stay 'Running' (yellow status) forever."
+        echo "To stop the bot: Cancel this workflow in GitHub Actions UI"
+        echo "To restart: Cancel workflow, then push a new commit or trigger manually"
+        echo ""
+        echo "=========================================="
+        echo ""
+        
+        # Infinite loop - keeps workflow alive forever
+        while true; do
+          # Check if bot is still running
           if ! kill -0 $BOT_PID 2>/dev/null; then
-            echo "✗ Bot process died, check logs:"
-            tail -50 bot.log
+            echo ""
+            echo "=========================================="
+            echo "✗ Bot process died at $(date)"
+            echo "=========================================="
+            echo ""
+            echo "Full logs:"
+            cat bot.log
             exit 1
           fi
           
-          # Every 2.5 minutes, show status
-          echo "Bot running... (check $i/138)"
-          sleep 150
-        done
-        
-        echo "✓ Bot ran successfully for 5h 45m"
-        echo "Final logs:"
-        tail -30 bot.log
-    
-    - name: Stop bot gracefully
-      run: |
-        if [ -f bot.pid ]; then
-          BOT_PID=$(cat bot.pid)
-          if kill -0 $BOT_PID 2>/dev/null; then
-            echo "Stopping bot (PID: $BOT_PID)..."
-            kill -TERM $BOT_PID
-            sleep 2
+          # Show timestamp and status
+          echo "[$(date '+%Y-%m-%d %H:%M:%S UTC')] Check #$COUNTER - Bot alive (PID: $BOT_PID)"
+          
+          # Every 10 checks (50 minutes), show recent logs
+          if [ $((COUNTER % 10)) -eq 0 ]; then
+            echo ""
+            echo "--- Recent bot activity (last 30 lines) ---"
+            tail -30 bot.log | grep -v "^$" || echo "No recent activity"
+            echo "--- End of recent activity ---"
+            echo ""
           fi
-        fi
-    
-    - name: Trigger next run
-      if: always()
-      run: |
-        git config user.name "NetBlocks Bot"
-        git config user.email "bot@netblocks.local"
-        
-        # Update timestamp to trigger new workflow
-        date +%s > .trigger
-        
-        git add .trigger
-        git commit -m "Auto-restart bot [skip ci] $(date)"
-        git push
-        
-        echo "✅ Next workflow triggered!"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Cleanup old runs to save space
-  cleanup:
-    runs-on: ubuntu-latest
-    if: always()
-    needs: run-bot
-    
-    steps:
-    - name: Delete old workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        repository: ${{ github.repository }}
-        retain_days: 1
-        keep_minimum_runs: 3
+          
+          # Sleep for 5 minutes between checks
+          sleep 300
+          
+          COUNTER=$((COUNTER + 1))
+        done

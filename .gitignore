@@ -54,7 +54,7 @@ Thumbs.db
 # Systemd service files (for local testing)
 *.service
 
-# Bot logs and PIDs
+# Bot logs and PIDs (from GitHub Actions)
 bot.log
 bot.pid
 
