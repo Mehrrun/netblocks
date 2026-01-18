@@ -141,46 +141,79 @@ jobs:
             fi
           fi
           
-          # Check for Cloudflare API responses
-          if grep -q "Cloudflare API response: Status 200" bot.log 2>/dev/null; then
-            API_CONNECTED=true
-            STATUS_CODE="200 OK"
+          # Check for Cloudflare API responses - capture ANY status code
+          if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+            # Get the latest status response
+            STATUS_LINE=$(grep "Cloudflare API response: Status" bot.log | tail -1)
+            STATUS_CODE_NUM=$(echo "$STATUS_LINE" | sed -n 's/.*Status \([0-9]*\).*/\1/p')
+            STATUS_TEXT=$(echo "$STATUS_LINE" | sed -n 's/.*Status [0-9]* \([^(]*\).*/\1/p' | xargs)
             
-            # Check if data was received
-            if grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
-              SUCCESS_LINE=$(grep "Cloudflare API success - received" bot.log | tail -1)
-              DATA_AVAILABLE=true
-              # Extract data points count
-              if echo "$SUCCESS_LINE" | grep -q "received [0-9]* data points"; then
-                DATA_POINTS=$(echo "$SUCCESS_LINE" | sed -n 's/.*received \([0-9]*\) data points.*/\1/p')
+            if [ "$STATUS_CODE_NUM" = "200" ]; then
+              API_CONNECTED=true
+              STATUS_CODE="200 OK"
+              
+              # Check if data was received
+              if grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
+                SUCCESS_LINE=$(grep "Cloudflare API success - received" bot.log | tail -1)
+                DATA_AVAILABLE=true
+                # Extract data points count
+                if echo "$SUCCESS_LINE" | grep -q "received [0-9]* data points"; then
+                  DATA_POINTS=$(echo "$SUCCESS_LINE" | sed -n 's/.*received \([0-9]*\) data points.*/\1/p')
+                fi
+              fi
+            else
+              # Any non-200 status code
+              API_CONNECTED=false
+              STATUS_CODE="$STATUS_CODE_NUM $STATUS_TEXT"
+              
+              # Extract error message from Cloudflare API error logs
+              if grep -q "Cloudflare API error" bot.log 2>/dev/null; then
+                # Get the error message associated with this status code
+                ERROR_LINE=$(grep -A 3 "Cloudflare API response: Status $STATUS_CODE_NUM" bot.log | grep "Cloudflare API error" | tail -1)
+                if [ -n "$ERROR_LINE" ]; then
+                  ERROR_MSG=$(echo "$ERROR_LINE" | sed -n 's/.*Cloudflare API error [0-9]*: *\(.*\)/\1/p')
+                fi
+              fi
+              
+              # If no error message found, set default based on status code
+              if [ -z "$ERROR_MSG" ]; then
+                case "$STATUS_CODE_NUM" in
+                  401)
+                    ERROR_MSG="Token authentication failed - token may be invalid"
+                    ;;
+                  403)
+                    ERROR_MSG="Permission denied - token lacks Radar API permission"
+                    ;;
+                  404)
+                    ERROR_MSG="API endpoint not found - check URL"
+                    ;;
+                  429)
+                    ERROR_MSG="Rate limit exceeded"
+                    ;;
+                  500|502|503|504)
+                    ERROR_MSG="Cloudflare API server error"
+                    ;;
+                  *)
+                    ERROR_MSG="HTTP Status $STATUS_CODE_NUM - $STATUS_TEXT"
+                    ;;
+                esac
+              fi
+              
+              # Try to get response body if available
+              if grep -q "Cloudflare API returned non-200 status. Response body:" bot.log 2>/dev/null; then
+                RESPONSE_BODY=$(grep "Cloudflare API returned non-200 status. Response body:" bot.log | tail -1 | sed 's/.*Response body: *//' | cut -c1-200)
               fi
             fi
-          elif grep -q "Cloudflare API response: Status 401" bot.log 2>/dev/null; then
-            API_CONNECTED=false
-            STATUS_CODE="401 Unauthorized"
-            ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 401" bot.log | grep "Cloudflare API error" | tail -1 | sed 's/.*Cloudflare API error[^:]*: *//')
-            if [ -z "$ERROR_MSG" ]; then
-              ERROR_MSG="Token authentication failed - token may be invalid"
-            fi
-          elif grep -q "Cloudflare API response: Status 403" bot.log 2>/dev/null; then
-            API_CONNECTED=false
-            STATUS_CODE="403 Forbidden"
-            ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 403" bot.log | grep "Cloudflare API error" | tail -1 | sed 's/.*Cloudflare API error[^:]*: *//')
-            if [ -z "$ERROR_MSG" ]; then
-              ERROR_MSG="Permission denied - token lacks Radar API permission"
-            fi
-          elif grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
-            # Other status codes
-            STATUS_LINE=$(grep "Cloudflare API response: Status" bot.log | tail -1)
-            STATUS_CODE=$(echo "$STATUS_LINE" | sed -n 's/.*Status \([0-9]*\).*/\1/p')
-            if [ "$STATUS_CODE" != "200" ]; then
-              API_CONNECTED=false
-              ERROR_MSG="HTTP Status $STATUS_CODE"
-            fi
           elif grep -q "Error making HTTP request to Cloudflare" bot.log 2>/dev/null; then
+            # Network/connection error
             API_CONNECTED=false
             STATUS_CODE="Connection Failed"
             ERROR_MSG=$(grep "Error making HTTP request to Cloudflare" bot.log | tail -1 | sed 's/.*Error making HTTP request to Cloudflare: *//')
+          elif grep -q "Fetching Cloudflare Radar data from:" bot.log 2>/dev/null; then
+            # API call was attempted but no response logged yet
+            API_CONNECTED=false
+            STATUS_CODE="No Response Yet"
+            ERROR_MSG="API call initiated but no response logged yet - check logs"
           fi
           
           # Print summary
@@ -222,6 +255,59 @@ jobs:
               echo "   Error: $ERROR_MSG"
             fi
             echo "   Data Status: NOT AVAILABLE (using default 1% connection data)"
+          fi
+          
+          # Add diagnostic information section
+          if [ "$API_CONNECTED" = false ] || [ -n "$ERROR_MSG" ]; then
+            echo ""
+            echo "--- Cloudflare Diagnostic Information ---"
+            
+            # Show last API call URL
+            if grep -q "Fetching Cloudflare Radar data from:" bot.log 2>/dev/null; then
+              API_URL=$(grep "Fetching Cloudflare Radar data from:" bot.log | tail -1 | sed 's/.*Fetching Cloudflare Radar data from: *//')
+              echo "Last API Call URL: $API_URL"
+            fi
+            
+            # Show authentication method used
+            if grep -q "Using Cloudflare.*authentication" bot.log 2>/dev/null; then
+              AUTH_USED=$(grep "Using Cloudflare.*authentication" bot.log | tail -1)
+              echo "Authentication Used: $AUTH_USED"
+            fi
+            
+            # Show recent Cloudflare-related log lines (last 8 lines)
+            echo ""
+            echo "Recent Cloudflare API Logs (last 8 lines):"
+            grep -i "cloudflare\|radar" bot.log 2>/dev/null | tail -8 | while read line; do
+              echo "  $line"
+            done || echo "  (No Cloudflare logs found yet)"
+            
+            # Show response body if available
+            if [ -n "$RESPONSE_BODY" ]; then
+              echo ""
+              echo "Response Body Preview (first 200 chars):"
+              echo "  $RESPONSE_BODY"
+            fi
+            
+            # Show all HTTP status codes encountered
+            if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+              echo ""
+              echo "All HTTP Status Codes Encountered:"
+              grep "Cloudflare API response: Status" bot.log | sed 's/.*Cloudflare API response: Status \([0-9]*\).*/\1/' | sort -u | while read code; do
+                COUNT=$(grep "Cloudflare API response: Status $code" bot.log | wc -l)
+                echo "  Status $code: $COUNT time(s)"
+              done
+            fi
+            
+            # Show all Cloudflare API errors
+            if grep -q "Cloudflare API error" bot.log 2>/dev/null; then
+              echo ""
+              echo "All Cloudflare API Errors:"
+              grep "Cloudflare API error" bot.log | tail -5 | while read line; do
+                echo "  $line"
+              done
+            fi
+            
+            echo "--- End Diagnostic Information ---"
           fi
           
           echo ""
