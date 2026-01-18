@@ -104,95 +104,128 @@ jobs:
         echo "📢 Sending updates to Telegram channel every 10 minutes"
         echo ""
         
-        # Print Cloudflare authentication status from bot logs
+        # Print Cloudflare authentication and connection status
         echo "=========================================="
-        echo "🔑 Cloudflare Authentication Status:"
+        echo "🔑 Cloudflare Radar API Status:"
         echo "=========================================="
         
-        # Check if token was passed to bot (from bot logs)
-        if [ -f bot.log ]; then
+        # Check if bot log exists
+        if [ ! -f bot.log ]; then
+          echo "⏳ Bot log file not found yet, waiting for initialization..."
+          echo "=========================================="
+          echo ""
+        else
+          # Initialize status variables
+          TOKEN_RECEIVED=false
+          AUTH_METHOD=""
+          API_CONNECTED=false
+          DATA_AVAILABLE=false
+          STATUS_CODE=""
+          ERROR_MSG=""
+          DATA_POINTS=0
+          
+          # Check if token was received
           if grep -q "NewTrafficMonitor: token set=true" bot.log 2>/dev/null; then
+            TOKEN_RECEIVED=true
             TOKEN_LINE=$(grep "NewTrafficMonitor: token set=true" bot.log | tail -1)
-            echo "✅ Bot process received Cloudflare token"
-            echo "   $TOKEN_LINE"
-            
-            # Extract token length if available
             if echo "$TOKEN_LINE" | grep -q "len="; then
               TOKEN_LEN=$(echo "$TOKEN_LINE" | sed -n 's/.*len=\([0-9]*\).*/\1/p')
-              echo "   Token length: $TOKEN_LEN characters"
             fi
-          elif grep -q "NewTrafficMonitor: token set=false" bot.log 2>/dev/null; then
-            echo "❌ Bot process did NOT receive Cloudflare token"
-            echo "   Check if CLOUDFLARE_TOKEN secret is set in repository settings"
-          else
-            echo "⏳ Waiting for bot to initialize and check token..."
-            echo "   Will check again on next iteration"
           fi
           
-          # Check authentication method used
+          # Check authentication method
           if grep -q "Using Cloudflare Bearer Token authentication" bot.log 2>/dev/null; then
-            AUTH_LINE=$(grep "Using Cloudflare Bearer Token authentication" bot.log | tail -1)
-            echo "✅ Authentication method: Bearer Token"
-            if echo "$AUTH_LINE" | grep -q "token length:"; then
-              echo "   $AUTH_LINE"
+            AUTH_METHOD="Bearer Token"
+            if [ -n "$TOKEN_LEN" ]; then
+              AUTH_METHOD="Bearer Token (length: $TOKEN_LEN)"
             fi
-          elif grep -q "Using Cloudflare API Key authentication" bot.log 2>/dev/null; then
-            AUTH_LINE=$(grep "Using Cloudflare API Key authentication" bot.log | tail -1)
-            echo "⚠️  Authentication method: API Key (legacy)"
-            echo "   $AUTH_LINE"
-          elif grep -q "WARNING: No Cloudflare credentials available" bot.log 2>/dev/null; then
-            echo "❌ No Cloudflare credentials available"
-            echo "   Set CLOUDFLARE_TOKEN secret in repository settings"
           fi
           
           # Check for Cloudflare API responses
-          if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
-            echo ""
-            echo "📡 Recent Cloudflare API responses:"
-            grep "Cloudflare API response: Status" bot.log | tail -3 | while read line; do
-              echo "   $line"
-            done
+          if grep -q "Cloudflare API response: Status 200" bot.log 2>/dev/null; then
+            API_CONNECTED=true
+            STATUS_CODE="200 OK"
             
-            # Check for successful responses
-            if grep -q "Cloudflare API response: Status 200" bot.log 2>/dev/null; then
-              echo "   ✅ API calls are succeeding (Status 200)"
-            fi
-            
-            # Check for authentication errors
-            if grep -q "Cloudflare API response: Status 401" bot.log 2>/dev/null; then
-              echo "   ❌ Authentication failed (Status 401) - Token may be invalid"
-              ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 401" bot.log | grep "Cloudflare API error" | tail -1)
-              if [ -n "$ERROR_MSG" ]; then
-                echo "   $ERROR_MSG"
+            # Check if data was received
+            if grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
+              SUCCESS_LINE=$(grep "Cloudflare API success - received" bot.log | tail -1)
+              DATA_AVAILABLE=true
+              # Extract data points count
+              if echo "$SUCCESS_LINE" | grep -q "received [0-9]* data points"; then
+                DATA_POINTS=$(echo "$SUCCESS_LINE" | sed -n 's/.*received \([0-9]*\) data points.*/\1/p')
               fi
             fi
-            
-            if grep -q "Cloudflare API response: Status 403" bot.log 2>/dev/null; then
-              echo "   ❌ Permission denied (Status 403) - Token lacks Radar permission"
-              ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 403" bot.log | grep "Cloudflare API error" | tail -1)
-              if [ -n "$ERROR_MSG" ]; then
-                echo "   $ERROR_MSG"
-              fi
+          elif grep -q "Cloudflare API response: Status 401" bot.log 2>/dev/null; then
+            API_CONNECTED=false
+            STATUS_CODE="401 Unauthorized"
+            ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 401" bot.log | grep "Cloudflare API error" | tail -1 | sed 's/.*Cloudflare API error[^:]*: *//')
+            if [ -z "$ERROR_MSG" ]; then
+              ERROR_MSG="Token authentication failed - token may be invalid"
             fi
+          elif grep -q "Cloudflare API response: Status 403" bot.log 2>/dev/null; then
+            API_CONNECTED=false
+            STATUS_CODE="403 Forbidden"
+            ERROR_MSG=$(grep -A 2 "Cloudflare API response: Status 403" bot.log | grep "Cloudflare API error" | tail -1 | sed 's/.*Cloudflare API error[^:]*: *//')
+            if [ -z "$ERROR_MSG" ]; then
+              ERROR_MSG="Permission denied - token lacks Radar API permission"
+            fi
+          elif grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+            # Other status codes
+            STATUS_LINE=$(grep "Cloudflare API response: Status" bot.log | tail -1)
+            STATUS_CODE=$(echo "$STATUS_LINE" | sed -n 's/.*Status \([0-9]*\).*/\1/p')
+            if [ "$STATUS_CODE" != "200" ]; then
+              API_CONNECTED=false
+              ERROR_MSG="HTTP Status $STATUS_CODE"
+            fi
+          elif grep -q "Error making HTTP request to Cloudflare" bot.log 2>/dev/null; then
+            API_CONNECTED=false
+            STATUS_CODE="Connection Failed"
+            ERROR_MSG=$(grep "Error making HTTP request to Cloudflare" bot.log | tail -1 | sed 's/.*Error making HTTP request to Cloudflare: *//')
           fi
           
-          # Check for Cloudflare API errors
-          if grep -qi "Cloudflare API error" bot.log 2>/dev/null; then
-            echo ""
-            echo "⚠️  Cloudflare API errors found:"
-            grep -i "Cloudflare API error" bot.log | tail -3 | while read line; do
-              echo "   $line"
-            done
+          # Print summary
+          echo ""
+          if [ "$TOKEN_RECEIVED" = true ]; then
+            echo "✅ Token Status: RECEIVED"
+            if [ -n "$AUTH_METHOD" ]; then
+              echo "   Authentication: $AUTH_METHOD"
+            fi
+          else
+            echo "❌ Token Status: NOT RECEIVED"
+            echo "   Check if CLOUDFLARE_TOKEN secret is set in repository settings"
           fi
           
-          # Check for successful API calls
-          if grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
-            SUCCESS_LINE=$(grep "Cloudflare API success - received" bot.log | tail -1)
-            echo ""
-            echo "✅ $SUCCESS_LINE"
+          echo ""
+          if [ "$API_CONNECTED" = true ]; then
+            echo "✅ Connection Status: CONNECTED to Cloudflare"
+            echo "   HTTP Status: $STATUS_CODE"
+            if [ "$DATA_AVAILABLE" = true ]; then
+              if [ "$DATA_POINTS" -gt 0 ]; then
+                echo "✅ Data Status: AVAILABLE ($DATA_POINTS data points received)"
+              else
+                echo "✅ Data Status: AVAILABLE (data received)"
+              fi
+              # Show traffic data details if available
+              if grep -q "Traffic data processed successfully" bot.log 2>/dev/null; then
+                TRAFFIC_LINE=$(grep "Traffic data processed successfully" bot.log | tail -1)
+                echo "   $TRAFFIC_LINE"
+              fi
+            else
+              echo "⚠️  Data Status: API connected but no data received yet"
+            fi
+          else
+            echo "❌ Connection Status: NOT CONNECTED to Cloudflare"
+            if [ -n "$STATUS_CODE" ]; then
+              echo "   HTTP Status: $STATUS_CODE"
+            fi
+            if [ -n "$ERROR_MSG" ]; then
+              echo "   Error: $ERROR_MSG"
+            fi
+            echo "   Data Status: NOT AVAILABLE (using default 1% connection data)"
           fi
-        else
-          echo "⏳ Bot log file not found yet, waiting for initialization..."
+          
+          echo ""
+          echo "=========================================="
         fi
         
         echo "=========================================="
@@ -228,24 +261,21 @@ jobs:
             tail -30 bot.log | grep -v "^$" || echo "No recent activity"
             echo "--- End of recent activity ---"
             echo ""
-            echo "--- Cloudflare Authentication Status ---"
-            if grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
-              echo "Recent Cloudflare API responses:"
-              grep "Cloudflare API response: Status" bot.log | tail -3 | while read line; do
-                echo "  $line"
-              done || true
-            fi
-            if grep -qi "Cloudflare API error\|Cloudflare.*401\|Cloudflare.*403" bot.log 2>/dev/null; then
-              echo "⚠️  Cloudflare errors:"
-              grep -i "Cloudflare API error\|Cloudflare.*401\|Cloudflare.*403" bot.log | tail -3 | while read line; do
-                echo "  $line"
-              done || true
-            fi
-            if grep -q "Cloudflare API success" bot.log 2>/dev/null; then
-              echo "✅ Recent successful API calls:"
-              grep "Cloudflare API success" bot.log | tail -2 | while read line; do
-                echo "  $line"
-              done || true
+            echo "--- Cloudflare Radar API Status ---"
+            # Quick status check
+            if grep -q "Cloudflare API response: Status 200" bot.log 2>/dev/null && grep -q "Cloudflare API success - received" bot.log 2>/dev/null; then
+              echo "✅ CONNECTED - Radar data is AVAILABLE"
+              LATEST_SUCCESS=$(grep "Cloudflare API success - received" bot.log | tail -1)
+              echo "  Latest: $LATEST_SUCCESS"
+            elif grep -q "Cloudflare API response: Status 401\|Cloudflare API response: Status 403" bot.log 2>/dev/null; then
+              echo "❌ NOT CONNECTED - Authentication failed"
+              LATEST_ERROR=$(grep "Cloudflare API response: Status" bot.log | tail -1)
+              echo "  $LATEST_ERROR"
+            elif grep -q "Cloudflare API response: Status" bot.log 2>/dev/null; then
+              LATEST_STATUS=$(grep "Cloudflare API response: Status" bot.log | tail -1)
+              echo "⚠️  Status: $LATEST_STATUS"
+            else
+              echo "⏳ Waiting for Cloudflare API response..."
             fi
             echo "--- End Cloudflare Status ---"
             echo ""
