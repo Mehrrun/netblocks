@@ -87,8 +87,14 @@ func (tm *TrafficMonitor) GetTrafficData(ctx context.Context) (*TrafficData, err
 // FetchFromCloudflare fetches traffic data from Cloudflare Radar API
 // Falls back to default values (1% connection) if API fails
 func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData, error) {
-	// Cloudflare Radar API endpoint for Iran HTTP traffic
-	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth?location=IR&dateRange=24h&aggInterval=1h"
+	// Cloudflare Radar API endpoint for Iran HTTP traffic bandwidth
+	// Using timeseries endpoint - returns HTTP request volume/time over time
+	// The correct endpoint is /radar/http/timeseries (NOT timeseries_groups)
+	// timeseries_groups expects group types like device_type, browser, etc., not 'bandwidth'
+	// dateRange: valid values are "1d", "7d", "14d", "24h", etc.
+	// location: IR for Iran
+	// aggInterval: aggregation interval like "1h", "1d", etc.
+	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IR&dateRange=1d&aggInterval=1h"
 
 	log.Printf("Fetching Cloudflare Radar data from: %s", url)
 
