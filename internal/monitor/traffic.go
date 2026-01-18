@@ -176,8 +176,36 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 		return tm.getDefaultData(), nil
 	}
 
+	// Log actual response structure for debugging
+	log.Printf("Cloudflare API response structure - Success: %v", apiResp.Success)
+	log.Printf("Response has Serie0.Values: %v (count: %d)", 
+		len(apiResp.Result.Serie0.Values) > 0, len(apiResp.Result.Serie0.Values))
+	log.Printf("Response has Serie0.Timestamps: %v (count: %d)", 
+		len(apiResp.Result.Serie0.Timestamps) > 0, len(apiResp.Result.Serie0.Timestamps))
+	
 	if len(apiResp.Result.Serie0.Values) == 0 {
 		log.Printf("Cloudflare API returned empty data (no values in serie_0)")
+		log.Printf("Full response body (first 2000 chars): %s", string(bodyBytes[:min(2000, len(bodyBytes))]))
+		
+		// Try to see if response structure is different - maybe it's in a different field
+		var rawResp map[string]interface{}
+		if json.Unmarshal(bodyBytes, &rawResp) == nil {
+			log.Printf("Response top-level keys: %v", getKeys(rawResp))
+			if result, ok := rawResp["result"].(map[string]interface{}); ok {
+				log.Printf("Result keys: %v", getKeys(result))
+				// Check for common alternative field names
+				if meta, ok := result["meta"].(map[string]interface{}); ok {
+					log.Printf("Meta keys: %v", getKeys(meta))
+				}
+				// Check if data is in a different serie field
+				for key := range result {
+					if key != "serie_0" && (key == "serie0" || key == "serie_1" || key == "data" || key == "timeseries") {
+						log.Printf("Found alternative field: %s = %v", key, result[key])
+					}
+				}
+			}
+		}
+		
 		return tm.getDefaultData(), nil
 	}
 
