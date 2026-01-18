@@ -267,9 +267,12 @@ jobs:
           fi
           
           # ALWAYS show diagnostic information section when NOT CONNECTED
-          if [ "$API_CONNECTED" = false ]; then
+          # Use != "true" to catch false, empty, or any other value
+          if [ "$API_CONNECTED" != "true" ]; then
             echo ""
+            echo "=========================================="
             echo "--- Cloudflare Diagnostic Information ---"
+            echo "=========================================="
             
             # Show last API call URL
             if grep -q "Fetching Cloudflare Radar data from:" bot.log 2>/dev/null; then
