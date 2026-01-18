@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -51,6 +53,10 @@ type CloudflareRadarResponse struct {
 // Accepts either API Token (cloudflareToken) or API Key (cloudflareEmail + cloudflareKey)
 // API Token is preferred for security
 func NewTrafficMonitor(cloudflareToken, cloudflareEmail, cloudflareKey string) *TrafficMonitor {
+	log.Printf("NewTrafficMonitor: token set=%v (len=%d), email set=%v, key set=%v", 
+		cloudflareToken != "", len(cloudflareToken),
+		cloudflareEmail != "", cloudflareKey != "")
+	
 	return &TrafficMonitor{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
@@ -84,46 +90,102 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	// Cloudflare Radar API endpoint for Iran HTTP traffic
 	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth?location=IR&dateRange=24h&aggInterval=1h"
 
+	log.Printf("Fetching Cloudflare Radar data from: %s", url)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		log.Printf("Error creating HTTP request: %v", err)
 		return tm.getDefaultData(), nil
 	}
 
 	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
 	
 	// Add Cloudflare authentication headers
+	authMethod := "none"
 	if tm.cloudflareToken != "" {
 		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+		authMethod = "Bearer Token"
+		log.Printf("Using Cloudflare Bearer Token authentication (token length: %d)", len(tm.cloudflareToken))
 	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
 		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
 		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
+		authMethod = "API Key"
+		log.Printf("Using Cloudflare API Key authentication (email: %s)", tm.cloudflareEmail)
+	} else {
+		log.Printf("WARNING: No Cloudflare credentials available - request will likely fail")
 	}
 
 	resp, err := tm.client.Do(req)
 	if err != nil {
+		log.Printf("Error making HTTP request to Cloudflare: %v (auth method: %s)", err, authMethod)
 		return tm.getDefaultData(), nil
 	}
 	defer resp.Body.Close()
 
+	// Read response body first (even if error) to see what Cloudflare says
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading response body: %v", err)
+		return tm.getDefaultData(), nil
+	}
+
+	log.Printf("Cloudflare API response: Status %d %s (auth method: %s)", resp.StatusCode, resp.Status, authMethod)
+
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		log.Printf("Cloudflare API returned non-200 status. Response body: %s", string(bodyBytes))
+		
+		// Try to parse error response
+		var errorResp struct {
+			Success bool `json:"success"`
+			Errors  []struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		if jsonErr := json.Unmarshal(bodyBytes, &errorResp); jsonErr == nil && len(errorResp.Errors) > 0 {
+			for _, err := range errorResp.Errors {
+				log.Printf("Cloudflare API error %d: %s", err.Code, err.Message)
+			}
+		}
+		
 		return tm.getDefaultData(), nil
 	}
 
 	var apiResp CloudflareRadarResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		log.Printf("Error decoding JSON response: %v", err)
+		log.Printf("Response body (first 500 chars): %s", string(bodyBytes[:min(500, len(bodyBytes))]))
 		return tm.getDefaultData(), nil
 	}
 
-	if !apiResp.Success || len(apiResp.Result.Serie0.Values) == 0 {
+	if !apiResp.Success {
+		if len(apiResp.Errors) > 0 {
+			log.Printf("Cloudflare API returned success=false with errors:")
+			for _, err := range apiResp.Errors {
+				log.Printf("  Error %d: %s", err.Code, err.Message)
+			}
+		} else {
+			log.Printf("Cloudflare API returned success=false (no error details provided)")
+		}
 		return tm.getDefaultData(), nil
 	}
+
+	if len(apiResp.Result.Serie0.Values) == 0 {
+		log.Printf("Cloudflare API returned empty data (no values in serie_0)")
+		return tm.getDefaultData(), nil
+	}
+
+	log.Printf("Cloudflare API success - received %d data points", len(apiResp.Result.Serie0.Values))
 
 	// Process the data
 	data, err := tm.processData(&apiResp)
 	if err != nil {
+		log.Printf("Error processing traffic data: %v", err)
 		return tm.getDefaultData(), nil
 	}
+
+	log.Printf("Traffic data processed successfully - Current Level: %.1f%%, Status: %s %s", 
+		data.CurrentLevel, data.StatusEmoji, data.Status)
 
 	// Cache the data
 	tm.mu.Lock()
@@ -132,6 +194,14 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 	tm.mu.Unlock()
 
 	return data, nil
+}
+
+// min helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // getDefaultData returns default traffic data (1% connection) when API fails
