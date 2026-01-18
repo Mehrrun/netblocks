@@ -177,9 +177,6 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		} else {
 			b.sendMessage(msg.Chat.ID, "Usage: /interval <minutes>\nExample: /interval 5")
 		}
-	case strings.HasPrefix(command, "/testchannel"):
-		log.Println("📤 Testing channel...")
-		b.handleTestChannel(msg.Chat.ID)
 	case strings.HasPrefix(command, "/help"):
 		log.Println("📤 Sending help message...")
 		b.sendHelp(msg.Chat.ID)
@@ -233,31 +230,12 @@ func (b *Bot) sendHelp(chatID int64) {
 /start - Start the bot and see welcome message
 /status - Get current status of all monitored systems
 /interval <minutes> - Set monitoring check interval (e.g., /interval 5)
-/testchannel - Test sending a message to the configured channel
 /help - Show this help message
 
 Example:
 /interval 10 - Set interval to 10 minutes`
 	
 	b.sendMessage(chatID, text)
-}
-
-func (b *Bot) handleTestChannel(chatID int64) {
-	if b.channelID == "" {
-		b.sendMessage(chatID, "❌ No channel configured. Set `telegram_channel` in config.json")
-		return
-	}
-	
-	testMsg := fmt.Sprintf("🧪 *Test Message*\n\nThis is a test message sent to channel: `%s`\n\nIf you see this in the channel, the bot is working correctly!", b.channelID)
-	
-	log.Printf("🧪 Testing channel send to: %s", b.channelID)
-	log.Printf("📋 Channel ID format: %T, value: %v", b.channelID, b.channelID)
-	
-	// Try sending to channel
-	b.sendMessage(b.channelID, testMsg)
-	
-	// Also send confirmation to user
-	b.sendMessage(chatID, fmt.Sprintf("✅ Test message sent to channel: %s\n\n⚠️ If you don't see it in the channel:\n1. Make sure the bot is an administrator\n2. Bot must have 'Post messages' permission\n3. Check bot logs for errors", b.channelID))
 }
 
 func (b *Bot) handleSetInterval(chatID int64, intervalStr string) {
