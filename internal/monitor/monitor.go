@@ -39,8 +39,8 @@ func NewMonitor(cfg *config.Config) (*Monitor, error) {
 	// Initialize DNS monitor with 8 second timeout for better reliability
 	dnsMonitor := NewDNSMonitor(cfg.DNSServers, 8*time.Second)
 
-	// Initialize Traffic monitor
-	trafficMonitor := NewTrafficMonitor()
+	// Initialize Traffic monitor with Cloudflare credentials
+	trafficMonitor := NewTrafficMonitor(cfg.CloudflareEmail, cfg.CloudflareKey)
 
 	return &Monitor{
 		bgpClient:      bgpClient,

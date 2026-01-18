@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -10,11 +11,13 @@ import (
 
 // TrafficMonitor monitors Iran's internet traffic using Cloudflare Radar API
 type TrafficMonitor struct {
-	client      *http.Client
-	lastUpdate  time.Time
-	cachedData  *TrafficData
-	mu          sync.RWMutex
-	baseline    float64
+	client          *http.Client
+	lastUpdate      time.Time
+	cachedData      *TrafficData
+	mu              sync.RWMutex
+	baseline        float64
+	cloudflareEmail string
+	cloudflareKey   string
 }
 
 // TrafficData represents Iran's internet traffic statistics
@@ -44,12 +47,14 @@ type CloudflareRadarResponse struct {
 }
 
 // NewTrafficMonitor creates a new traffic monitor
-func NewTrafficMonitor() *TrafficMonitor {
+func NewTrafficMonitor(cloudflareEmail, cloudflareKey string) *TrafficMonitor {
 	return &TrafficMonitor{
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		baseline: 100.0, // Will be calculated from data
+		baseline:        100.0, // Will be calculated from data
+		cloudflareEmail: cloudflareEmail,
+		cloudflareKey:   cloudflareKey,
 	}
 }
 
@@ -70,72 +75,62 @@ func (tm *TrafficMonitor) GetTrafficData(ctx context.Context) (*TrafficData, err
 
 // FetchFromCloudflare fetches traffic data from Cloudflare Radar API
 func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData, error) {
-	// For now, generate simulated traffic data based on ASN/DNS connectivity
-	// TODO: Integrate with actual Cloudflare Radar API when auth token is available
-	
-	// Generate realistic 24-hour traffic pattern
-	now := time.Now()
-	trend := make([]float64, 24)
-	timestamps := make([]time.Time, 24)
-	
-	// Simulate traffic pattern: higher during day (8am-11pm), lower at night
-	for i := 0; i < 24; i++ {
-		hour := (now.Hour() - (23 - i) + 24) % 24
-		timestamps[i] = now.Add(-time.Duration(23-i) * time.Hour)
-		
-		// Base traffic level
-		baseLevel := 75.0
-		
-		// Add time-of-day variation
-		if hour >= 8 && hour <= 23 {
-			// Daytime - higher traffic
-			baseLevel = 80.0 + float64((hour-8)*2)
-			if hour > 20 {
-				baseLevel = 95.0 - float64((hour-20)*3)
-			}
-		} else {
-			// Nighttime - lower traffic
-			baseLevel = 60.0 + float64(hour*2)
-		}
-		
-		// Add some realistic variation (±5%)
-		variation := (float64(i%5) - 2.0) * 2.0
-		trend[i] = baseLevel + variation
-		
-		// Ensure within bounds
-		if trend[i] < 40 {
-			trend[i] = 40
-		}
-		if trend[i] > 100 {
-			trend[i] = 100
-		}
+	// Cloudflare Radar API endpoint for Iran HTTP traffic
+	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth?location=IR&dateRange=24h&aggInterval=1h"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
 	
-	// Current level is the latest value
-	currentLevel := trend[23]
-	
-	// Calculate baseline (average of earlier hours)
-	baselineSum := 0.0
-	for i := 0; i < 12; i++ {
-		baselineSum += trend[i]
+	// Add Cloudflare authentication headers if provided
+	if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
+		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
+		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
 	}
-	baselinePercent := baselineSum / 12.0
-	
-	// Calculate change percentage
-	changePercent := ((currentLevel - baselinePercent) / baselinePercent) * 100.0
-	
-	// Determine status
-	status, emoji := tm.determineStatus(currentLevel, baselinePercent)
-	
-	return &TrafficData{
-		CurrentLevel:  currentLevel,
-		Trend24h:      trend,
-		Timestamps:    timestamps,
-		ChangePercent: changePercent,
-		Status:        status,
-		StatusEmoji:   emoji,
-		LastUpdate:    time.Now(),
-	}, nil
+
+	resp, err := tm.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch data: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Try to read error response
+		var apiResp CloudflareRadarResponse
+		if err := json.NewDecoder(resp.Body).Decode(&apiResp); err == nil && len(apiResp.Errors) > 0 {
+			return nil, fmt.Errorf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+		}
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var apiResp CloudflareRadarResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !apiResp.Success {
+		if len(apiResp.Errors) > 0 {
+			return nil, fmt.Errorf("API error %d: %s", apiResp.Errors[0].Code, apiResp.Errors[0].Message)
+		}
+		return nil, fmt.Errorf("API request was not successful")
+	}
+
+	// Process the data
+	data, err := tm.processData(&apiResp)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the data
+	tm.mu.Lock()
+	tm.cachedData = data
+	tm.lastUpdate = time.Now()
+	tm.mu.Unlock()
+
+	return data, nil
 }
 
 // processData processes the Cloudflare API response into TrafficData

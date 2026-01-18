@@ -8,12 +8,15 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	TelegramToken string        `json:"telegram_token"`
-	TelegramChannel string      `json:"telegram_channel,omitempty"` // Channel username (e.g., @IranBlackoutMonitor) or chat ID
-	Interval      time.Duration `json:"interval"`
-	RISLiveURL    string        `json:"ris_live_url"`
-	DNSServers    []DNSServer   `json:"dns_servers"`
-	IranASNs      []string      `json:"iran_asns"`
+	TelegramToken   string        `json:"telegram_token"`
+	TelegramChannel string        `json:"telegram_channel,omitempty"` // Channel username (e.g., @IranBlackoutMonitor) or chat ID
+	Interval        time.Duration `json:"-"`
+	IntervalStr     string        `json:"interval"`
+	RISLiveURL      string        `json:"ris_live_url"`
+	DNSServers      []DNSServer   `json:"dns_servers"`
+	IranASNs        []string      `json:"iran_asns"`
+	CloudflareEmail string        `json:"cloudflare_email,omitempty"`
+	CloudflareKey   string        `json:"cloudflare_key,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for Config

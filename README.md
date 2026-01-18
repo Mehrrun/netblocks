@@ -75,8 +75,11 @@ Create a `config.json` file in the project root (optional - defaults will be use
 ```json
 {
   "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
+  "telegram_channel": "@YourChannelUsername",
   "interval": "5m",
   "ris_live_url": "wss://ris-live.ripe.net/v1/ws/?client=netblocks",
+  "cloudflare_email": "your-email@example.com",
+  "cloudflare_key": "your-cloudflare-api-key",
   "dns_servers": [],
   "iran_asns": []
 }
@@ -85,6 +88,9 @@ Create a `config.json` file in the project root (optional - defaults will be use
 ### Environment Variables
 
 - `TELEGRAM_BOT_TOKEN`: Telegram bot token (alternative to config file)
+- `TELEGRAM_CHANNEL`: Telegram channel username for updates
+- `CLOUDFLARE_EMAIL`: Cloudflare account email (for Radar API)
+- `CLOUDFLARE_KEY`: Cloudflare API key (for Radar API)
 
 ## Usage
 
@@ -155,15 +161,15 @@ DNS monitoring includes:
 ### Traffic Monitoring
 
 Traffic monitoring provides:
-- Real-time Iran internet traffic analysis with simulated realistic patterns
+- Real-time Iran internet traffic analysis via Cloudflare Radar API
 - 24-hour traffic trend visualization with PNG charts
 - Traffic level percentage calculations
 - Change detection (vs baseline)
 - Status classification: Normal (>70%), Degraded (30-70%), Throttled (10-30%), Shutdown (<10%)
 - Visual charts sent as images in Telegram
-- Time-of-day traffic patterns (higher during daytime, lower at night)
+- 5-minute caching to avoid API rate limits
 - Background refresh every 10 minutes
-- Note: Currently uses simulated data; Cloudflare Radar API integration requires authentication token
+- Requires Cloudflare API credentials (email + API key)
 
 ## Monitored Iranian ASNs
 
@@ -430,12 +436,13 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 
 ### Cloudflare Radar API
 
-Traffic monitoring framework ready for Cloudflare Radar API integration:
+Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare.com/radar/) for Iran's internet traffic data:
 - Endpoint: `https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth`
-- Currently uses simulated traffic data (realistic time-of-day patterns)
-- To enable real Cloudflare data: Add authentication token to the API request
+- Requires authentication: Cloudflare email + API key
+- Get your API key from: https://dash.cloudflare.com/profile/api-tokens
+- 24-hour historical data with 1-hour aggregation intervals
 - Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
-- Simulated data provides realistic daytime/nighttime traffic variations
+- Set credentials in `config.json` or environment variables
 
 ## Output Format
 
@@ -486,10 +493,10 @@ Traffic monitoring framework ready for Cloudflare Radar API integration:
 
 ### Traffic Chart Not Showing
 
-- Currently uses simulated traffic data with realistic patterns
+- Ensure Cloudflare credentials are configured in `config.json`
+- Get API key from https://dash.cloudflare.com/profile/api-tokens
+- Check bot logs for API authentication errors
 - Chart generation requires go-chart library dependencies
-- To use real Cloudflare Radar data: Configure API authentication token
-- Check bot logs for chart generation errors
 - Ensure bot has permission to send photos in the channel
 
 ## Contributing
