@@ -210,7 +210,11 @@ The tool monitors **40 Iranian ASNs** including:
 
 ## Monitored DNS Servers
 
-The tool monitors **80+ Iranian DNS servers** including:
+The tool monitors **120+ Iranian DNS servers** including both **authoritative nameservers** and **recursive DNS servers**:
+
+### What's the Difference?
+- **Authoritative Nameservers**: DNS servers that provide official DNS records for specific domains (e.g., ns1.shatel.ir answers queries about shatel.ir)
+- **Recursive DNS Servers**: DNS servers that end-users configure in their network settings for general browsing (e.g., 217.218.127.127 is TCI's public DNS that anyone on their network can use)
 
 ### NIC.ir Authoritative Nameservers (.ir TLD)
 - `193.189.123.2` - NIC.ir DNS (a.nic.ir)
@@ -224,7 +228,9 @@ The tool monitors **80+ Iranian DNS servers** including:
 - **MCCI**: ns1-4.mci.ir (5.106.4.129, 5.106.4.130, 5.106.5.129, 5.106.5.130)
 - **Rightel**: ns1-4.rightel.ir (185.24.139.91, 185.24.139.71, 185.24.136.90, 91.229.214.232)
 
-### Major ISPs Nameservers
+### Major ISPs Nameservers (Authoritative)
+- **TCI**: ns1-3.tci.ir (194.225.62.1-3)
+- **ITC**: ns1-3.itc.ir (194.225.62.10-12)
 - **Shatel**: ns1-4.shatel.ir (178.131.80.1-4)
 - **Asiatech**: ns1-2.asiatech.ir (185.98.113.141, 185.98.113.142)
 - **ParsOnline**: ns1-4.parsonline.ir (194.225.62.80-83)
@@ -247,6 +253,77 @@ The tool monitors **80+ Iranian DNS servers** including:
 - **IRCDN**: Uses Cloudflare nameservers (108.162.194.236, 172.64.35.109)
 
 ### Datacenter Providers Nameservers
+- **Datak**: ns1-4.datak.ir (81.91.129.230, 81.91.129.229, 81.91.129.226, 81.91.129.227)
+- **Pardis Fanvari**: ns1-2.pardis.ir (185.143.235.1-2)
+- **Mabna (Satcomco)**: ns1-2.satcomco.com (45.14.135.25)
+- **ParsPack**: Uses CloudNS nameservers (109.201.133.251, 185.206.180.55, 178.156.179.118, 51.91.57.244)
+- **IranServer**: Uses Cloudflare nameservers (108.162.193.143, 173.245.58.184)
+- **Iranian Data Center**: 176.62.144.44
+
+### Academic & Research Nameservers
+- **IPM**: ns1-3.ipm.ir (194.225.62.60-62)
+- **IsIran**: ns1-2.isiran.ir (194.225.62.70-71)
+
+### Regional & Municipal Nameservers
+- **Isfahan Municipality**: ns1-2.isfahan.ir (194.225.62.75-76)
+
+### Public DNS Services (Recursive)
+- **Shecan DNS**: 178.22.122.100, 185.51.200.2, 178.22.122.101, 185.51.200.1
+
+---
+
+## Recursive DNS Servers (Public Resolvers)
+
+These are the DNS servers that Iranian end-users actually configure in their network settings for browsing:
+
+### TCI/ITC/TIC Group Recursive DNS
+- **TCI (Mokhaberat)**: 
+  - Primary: `217.218.127.127`
+  - Secondary: `217.218.155.155`
+  - Regional: `80.191.40.41`
+- **TIC (Infrastructure Co.)**: `2.189.44.44`
+- **ITC (Information Technology Co.)**: `2.188.21.130`
+
+### Major ISP Recursive DNS
+- **Shatel**: 
+  - Primary: `85.15.1.10`
+  - Secondary: `85.15.1.12`
+- **Asiatech**: 
+  - Primary: `194.225.150.10`
+  - Secondary: `194.225.150.20`
+- **ParsOnline**: `91.99.101.12`
+
+### Anti-Sanction & Gaming DNS Services
+- **403.online** (Anti-Sanction):
+  - Primary: `10.202.10.202` *(Private IP - accessible only within Iranian networks)*
+  - Secondary: `10.202.10.102` *(Private IP - accessible only within Iranian networks)*
+- **Electro** (Anti-Sanction/Gaming):
+  - Primary: `78.157.42.100`
+  - Secondary: `78.157.42.101`
+- **Radar Game**: `10.202.10.10` *(Private IP - accessible only within Iranian networks)*
+- **Begzar** (Anti-Sanction):
+  - Primary: `185.55.226.26`
+  - Secondary: `185.55.226.25`
+
+### Cloud Provider Recursive DNS
+- **ArvanCloud**: `185.97.117.187`
+- **Shahrad / Sefroyek**: `185.51.200.50`
+
+### Academic & Research Recursive DNS
+- **IRIPM** (Institute for Research): `194.225.73.141` (persia.iranet.ir)
+- **IROST** (Research Organization): `213.176.123.5`
+- **TUMS** (Tehran University of Medical Sciences): `194.225.62.80` (ourdns1.tums.ac.ir)
+
+### Regional & Municipal Recursive DNS
+- **Tehran Municipality ICT**:
+  - Primary: `31.24.234.34`
+  - Secondary: `31.24.234.35`
+  - Tertiary: `31.24.234.37`
+- **Kish Cell Pars (KCP Cloud)**: `91.245.229.1`
+
+### Other Providers
+- **Hamkaran System**: `185.187.84.15`
+- **Tehran Public DNS**: `37.156.145.229`
 - **Datak**: ns1-4.datak.ir (81.91.129.230, 81.91.129.229, 81.91.129.226, 81.91.129.227)
 - **Pardis Fanvari**: ns1-2.pardis.ir (185.143.235.1-2)
 - **Mabna**: ns1-2.satcomco.com (45.14.135.25)
