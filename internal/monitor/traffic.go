@@ -36,14 +36,9 @@ type TrafficData struct {
 
 // CloudflareRadarResponse represents the API response
 type CloudflareRadarResponse struct {
-	Success bool `json:"success"`
-	Result  struct {
-		Serie0 struct {
-			Timestamps []string `json:"timestamps"`
-			Values     []int64  `json:"values"`
-		} `json:"serie_0"`
-	} `json:"result"`
-	Errors []struct {
+	Success bool            `json:"success"`
+	Result  json.RawMessage `json:"result"`
+	Errors  []struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	} `json:"errors,omitempty"`
@@ -88,13 +83,13 @@ func (tm *TrafficMonitor) GetTrafficData(ctx context.Context) (*TrafficData, err
 // Falls back to default values (1% connection) if API fails
 func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData, error) {
 	// Cloudflare Radar API endpoint for Iran HTTP traffic bandwidth
-	// Using timeseries endpoint - returns HTTP request volume/time over time
-	// The correct endpoint is /radar/http/timeseries (NOT timeseries_groups)
-	// timeseries_groups expects group types like device_type, browser, etc., not 'bandwidth'
+	// Using timeseries endpoint - returns HTTP request volume/time over time.
+	// Request 7d to maximize data availability, then slice last 24h locally.
+	// The correct endpoint is /radar/http/timeseries (NOT timeseries_groups).
 	// dateRange: valid values are "1d", "7d", "14d", "24h", etc.
 	// location: IR for Iran
 	// aggInterval: aggregation interval like "1h", "1d", etc.
-	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IR&dateRange=1d&aggInterval=1h"
+	url := "https://api.cloudflare.com/client/v4/radar/http/timeseries?location=IR&dateRange=7d&aggInterval=1h"
 
 	log.Printf("Fetching Cloudflare Radar data from: %s", url)
 
@@ -176,43 +171,19 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 		return tm.getDefaultData(), nil
 	}
 
-	// Log actual response structure for debugging
-	log.Printf("Cloudflare API response structure - Success: %v", apiResp.Success)
-	log.Printf("Response has Serie0.Values: %v (count: %d)", 
-		len(apiResp.Result.Serie0.Values) > 0, len(apiResp.Result.Serie0.Values))
-	log.Printf("Response has Serie0.Timestamps: %v (count: %d)", 
-		len(apiResp.Result.Serie0.Timestamps) > 0, len(apiResp.Result.Serie0.Timestamps))
-	
-	if len(apiResp.Result.Serie0.Values) == 0 {
-		log.Printf("Cloudflare API returned empty data (no values in serie_0)")
+	timestamps, values, found := extractSeries(apiResp.Result)
+	if !found || len(values) == 0 {
+		log.Printf("Cloudflare API returned empty or unrecognized data structure")
 		log.Printf("Full response body (first 2000 chars): %s", string(bodyBytes[:min(2000, len(bodyBytes))]))
-		
-		// Try to see if response structure is different - maybe it's in a different field
-		var rawResp map[string]interface{}
-		if json.Unmarshal(bodyBytes, &rawResp) == nil {
-			log.Printf("Response top-level keys: %v", getKeys(rawResp))
-			if result, ok := rawResp["result"].(map[string]interface{}); ok {
-				log.Printf("Result keys: %v", getKeys(result))
-				// Check for common alternative field names
-				if meta, ok := result["meta"].(map[string]interface{}); ok {
-					log.Printf("Meta keys: %v", getKeys(meta))
-				}
-				// Check if data is in a different serie field
-				for key := range result {
-					if key != "serie_0" && (key == "serie0" || key == "serie_1" || key == "data" || key == "timeseries") {
-						log.Printf("Found alternative field: %s = %v", key, result[key])
-					}
-				}
-			}
-		}
-		
 		return tm.getDefaultData(), nil
 	}
 
-	log.Printf("Cloudflare API success - received %d data points", len(apiResp.Result.Serie0.Values))
+	// Keep only the last 24 data points (24 hours) to match chart expectations
+	timestamps, values = sliceLast24(timestamps, values)
+	log.Printf("Cloudflare API success - received %d data points (last 24h)", len(values))
 
 	// Process the data
-	data, err := tm.processData(&apiResp)
+	data, err := tm.processData(values, timestamps)
 	if err != nil {
 		log.Printf("Error processing traffic data: %v", err)
 		return tm.getDefaultData(), nil
@@ -247,6 +218,127 @@ func getKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+type radarSerie struct {
+	Timestamps []string  `json:"timestamps"`
+	Values     []float64 `json:"values"`
+}
+
+type radarResult struct {
+	Serie0    *radarSerie  `json:"serie_0"`
+	Serie0Alt *radarSerie  `json:"serie0"`
+	Series    []radarSerie `json:"series"`
+	Data      *radarSerie  `json:"data"`
+	Timeseries []radarSerie `json:"timeseries"`
+}
+
+func extractSeries(resultRaw json.RawMessage) ([]string, []float64, bool) {
+	var rr radarResult
+	if err := json.Unmarshal(resultRaw, &rr); err == nil {
+		if rr.Serie0 != nil && len(rr.Serie0.Values) > 0 {
+			return rr.Serie0.Timestamps, rr.Serie0.Values, true
+		}
+		if rr.Serie0Alt != nil && len(rr.Serie0Alt.Values) > 0 {
+			return rr.Serie0Alt.Timestamps, rr.Serie0Alt.Values, true
+		}
+		if len(rr.Series) > 0 && len(rr.Series[0].Values) > 0 {
+			return rr.Series[0].Timestamps, rr.Series[0].Values, true
+		}
+		if rr.Data != nil && len(rr.Data.Values) > 0 {
+			return rr.Data.Timestamps, rr.Data.Values, true
+		}
+		if len(rr.Timeseries) > 0 && len(rr.Timeseries[0].Values) > 0 {
+			return rr.Timeseries[0].Timestamps, rr.Timeseries[0].Values, true
+		}
+	}
+
+	var raw map[string]interface{}
+	if json.Unmarshal(resultRaw, &raw) != nil {
+		return nil, nil, false
+	}
+
+	// Try common keys in generic map
+	for _, key := range []string{"serie_0", "serie0", "series", "data", "timeseries"} {
+		if v, ok := raw[key]; ok {
+			if ts, vals, ok := parseSerie(v); ok {
+				return ts, vals, true
+			}
+		}
+	}
+
+	return nil, nil, false
+}
+
+func parseSerie(v interface{}) ([]string, []float64, bool) {
+	switch s := v.(type) {
+	case map[string]interface{}:
+		timestamps := toStringSlice(s["timestamps"])
+		values := toFloatSlice(s["values"])
+		if len(values) > 0 && len(timestamps) > 0 {
+			return timestamps, values, true
+		}
+	case []interface{}:
+		if len(s) > 0 {
+			return parseSerie(s[0])
+		}
+	}
+	return nil, nil, false
+}
+
+func toStringSlice(v interface{}) []string {
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func toFloatSlice(v interface{}) []float64 {
+	raw, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]float64, 0, len(raw))
+	for _, item := range raw {
+		if f, ok := toFloat(item); ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func toFloat(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func sliceLast24(timestamps []string, values []float64) ([]string, []float64) {
+	if len(values) <= 24 || len(timestamps) <= 24 {
+		return timestamps, values
+	}
+	start := len(values) - 24
+	if len(timestamps) > start {
+		return timestamps[start:], values[start:]
+	}
+	return timestamps, values[start:]
+}
+
 // getDefaultData returns default traffic data (1% connection) when API fails
 func (tm *TrafficMonitor) getDefaultData() *TrafficData {
 	// Generate 24 hours of data points with 1% connection
@@ -272,17 +364,14 @@ func (tm *TrafficMonitor) getDefaultData() *TrafficData {
 }
 
 // processData processes the Cloudflare API response into TrafficData
-func (tm *TrafficMonitor) processData(resp *CloudflareRadarResponse) (*TrafficData, error) {
-	if len(resp.Result.Serie0.Values) == 0 {
+func (tm *TrafficMonitor) processData(values []float64, timestamps []string) (*TrafficData, error) {
+	if len(values) == 0 {
 		return nil, fmt.Errorf("no data received from API")
 	}
 
-	values := resp.Result.Serie0.Values
-	timestamps := resp.Result.Serie0.Timestamps
-
 	// Calculate baseline (average of first half of data)
 	if tm.baseline == 100.0 && len(values) > 12 {
-		sum := int64(0)
+		sum := 0.0
 		for i := 0; i < len(values)/2; i++ {
 			sum += values[i]
 		}
@@ -291,7 +380,7 @@ func (tm *TrafficMonitor) processData(resp *CloudflareRadarResponse) (*TrafficDa
 
 	// Normalize values to percentages
 	trend := make([]float64, len(values))
-	maxVal := int64(1)
+	maxVal := 1.0
 	for _, v := range values {
 		if v > maxVal {
 			maxVal = v
@@ -299,7 +388,7 @@ func (tm *TrafficMonitor) processData(resp *CloudflareRadarResponse) (*TrafficDa
 	}
 
 	for i, v := range values {
-		trend[i] = (float64(v) / float64(maxVal)) * 100.0
+		trend[i] = (v / maxVal) * 100.0
 	}
 
 	// Current level is the latest value
