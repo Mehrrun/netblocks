@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.json", "Path to configuration file")
+	outputDir := flag.String("output", ".", "Directory to save chart images (default: current directory)")
+	saveCharts := flag.Bool("charts", false, "Save traffic charts as PNG files")
 	flag.Parse()
 
 	// Load configuration
@@ -22,7 +25,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
-
+	
+	// Check if Cloudflare credentials are available in config file
+	// CLI reads from config.json (not environment variables, unlike bot)
+	if cfg.CloudflareToken != "" {
+		log.Printf("✓ Cloudflare token loaded from config file (%d chars)", len(cfg.CloudflareToken))
+	} else if cfg.CloudflareEmail != "" && cfg.CloudflareKey != "" {
+		log.Printf("✓ Cloudflare API key loaded from config file (email: %s)", cfg.CloudflareEmail)
+	} else {
+		log.Println("⚠️  No Cloudflare credentials found in config file - traffic charts will be skipped")
+		log.Println("   Add 'cloudflare_token' to your config.json to enable traffic charts")
+	}
 
 	// Create monitor
 	mon, err := monitor.NewMonitor(cfg)
@@ -43,8 +56,16 @@ func main() {
 	go mon.Start(ctx)
 	time.Sleep(5 * time.Second) // Give BGP a moment to receive some updates
 	
+	// Get results
+	result := mon.GetResults()
+	
 	// Print status and exit (default behavior: run once)
-	printStatus(mon.GetResults())
+	printStatus(result)
+	
+	// Save charts if requested
+	if *saveCharts {
+		saveChartsToFiles(result, *outputDir)
+	}
 }
 
 func printStatus(result *models.MonitoringResult) {
@@ -152,5 +173,39 @@ func printStatus(result *models.MonitoringResult) {
 
 	fmt.Printf("\n📈 Summary: %d/%d Alive\n", aliveCount, dnsTotal)
 	fmt.Println()
+}
+
+// saveChartsToFiles saves traffic charts as PNG files
+func saveChartsToFiles(result *models.MonitoringResult, outputDir string) {
+	timestamp := result.Timestamp.Format("20060102_150405")
+	
+	// Save Iran traffic chart
+	if result.TrafficData != nil && result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
+		filename := fmt.Sprintf("%s/iran_traffic_%s.png", outputDir, timestamp)
+		if err := os.WriteFile(filename, result.TrafficData.ChartBuffer.Bytes(), 0644); err != nil {
+			log.Printf("⚠️  Failed to save Iran traffic chart: %v", err)
+		} else {
+			fmt.Printf("\n✅ Iran traffic chart saved: %s\n", filename)
+		}
+	} else {
+		fmt.Printf("\n⚠️  Iran traffic chart not available\n")
+	}
+	
+	// Save ASN traffic chart
+	if result.ASTrafficData != nil && len(result.ASTrafficData) > 0 {
+		firstItem := result.ASTrafficData[0]
+		if firstItem.ChartBuffer != nil && firstItem.ChartBuffer.Len() > 0 {
+			filename := fmt.Sprintf("%s/asn_traffic_%s.png", outputDir, timestamp)
+			if err := os.WriteFile(filename, firstItem.ChartBuffer.Bytes(), 0644); err != nil {
+				log.Printf("⚠️  Failed to save ASN traffic chart: %v", err)
+			} else {
+				fmt.Printf("✅ ASN traffic chart saved: %s\n", filename)
+			}
+		} else {
+			fmt.Printf("⚠️  ASN traffic chart not available\n")
+		}
+	} else {
+		fmt.Printf("⚠️  ASN traffic chart not available\n")
+	}
 }
 

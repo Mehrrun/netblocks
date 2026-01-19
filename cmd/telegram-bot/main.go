@@ -44,17 +44,28 @@ func main() {
 		}
 	}
 	
-	// Load Cloudflare credentials from environment variables
+	// Load Cloudflare credentials from environment variables (GitHub secrets)
+	// Environment variables take precedence for bot deployment
 	if token := os.Getenv("CLOUDFLARE_TOKEN"); token != "" {
 		cfg.CloudflareToken = token
+		log.Println("✓ Cloudflare token loaded from environment variable (GitHub secret)")
 	}
 	
 	if email := os.Getenv("CLOUDFLARE_EMAIL"); email != "" {
 		cfg.CloudflareEmail = email
+		log.Println("✓ Cloudflare email loaded from environment variable (GitHub secret)")
 	}
 	
 	if key := os.Getenv("CLOUDFLARE_KEY"); key != "" {
 		cfg.CloudflareKey = key
+		log.Println("✓ Cloudflare key loaded from environment variable (GitHub secret)")
+	}
+	
+	// Log if Cloudflare credentials are available (for ASN traffic chart)
+	if cfg.CloudflareToken != "" || (cfg.CloudflareEmail != "" && cfg.CloudflareKey != "") {
+		log.Println("✓ Cloudflare credentials available - ASN traffic chart will be generated")
+	} else {
+		log.Println("⚠️  No Cloudflare credentials found - ASN traffic chart will be skipped")
 	}
 
 	// Create monitor
