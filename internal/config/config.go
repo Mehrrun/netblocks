@@ -334,50 +334,380 @@ func GetDefaultIranianDNSServers() []DNSServer {
 		// ============================================
 		// PUBLIC DNS SERVICES (Iranian)
 		// ============================================
-		// Shecan DNS (Public DNS service)
-		{Address: "178.22.122.100", Name: "Shecan DNS (Primary)", Type: "recursive"},
-		{Address: "185.51.200.2", Name: "Shecan DNS (Secondary)", Type: "recursive"},
-		{Address: "178.22.122.101", Name: "Shecan DNS (Tertiary)", Type: "recursive"},
-		{Address: "185.51.200.1", Name: "Shecan DNS (Quaternary)", Type: "recursive"},
+		// Shecan DNS (Public DNS service) - Listed in Anti-Sanction section below
 
 		// ============================================
 		// RECURSIVE DNS SERVERS (Public Resolvers)
+		// Organized by city and provider
 		// These are DNS servers that end-users within Iranian networks use for browsing
 		// ============================================
 
 		// ============================================
-		// TCI/ITC/TIC GROUP - RECURSIVE DNS
+		// TEHRAN - RECURSIVE DNS SERVERS
 		// ============================================
-		// Iran Telecommunication Company (TCI / Mokhaberat)
-		{Address: "217.218.127.127", Name: "TCI Recursive DNS (Primary)", Type: "recursive"},
-		{Address: "217.218.155.155", Name: "TCI Recursive DNS (Secondary)", Type: "recursive"},
-		{Address: "80.191.40.41", Name: "TCI Recursive DNS (Regional)", Type: "recursive"},
+		// DCI Infrastructure - LCT EMAM (Ultimate priority)
+		{Address: "217.218.127.104", Name: "DCI LCT EMAM DNS (Tehran)", Type: "recursive"},
+		{Address: "217.218.127.105", Name: "DCI LCT EMAM DNS (Tehran)", Type: "recursive"},
+		{Address: "217.218.127.106", Name: "DCI LCT EMAM DNS (Tehran)", Type: "recursive"},
+		{Address: "217.218.155.105", Name: "DCI LCT EMAM DNS (Tehran)", Type: "recursive"},
+		{Address: "217.218.155.106", Name: "DCI LCT EMAM DNS (Tehran)", Type: "recursive"},
 
-		// Telecommunication Infrastructure Company (TIC)
-		{Address: "2.189.44.44", Name: "TIC Recursive DNS", Type: "recursive"},
+		// Iran Telecommunication Company (TCI / Mokhaberat) - Tehran
+		{Address: "217.218.127.127", Name: "TCI Recursive DNS (Tehran - Primary)", Type: "recursive"},
+		{Address: "217.218.155.155", Name: "TCI Recursive DNS (Tehran - Secondary)", Type: "recursive"},
+		{Address: "80.191.233.17", Name: "TCI Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "80.191.233.33", Name: "TCI Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "80.191.40.41", Name: "TCI Recursive DNS (Tehran - Regional)", Type: "recursive"},
 
-		// Information Technology Company (ITC)
-		{Address: "2.188.21.130", Name: "ITC Recursive DNS", Type: "recursive"},
+		// Telecommunication Infrastructure Company (TIC) - Tehran
+		// Note: IROST DNS is listed below in IROST section
+
+		// Information Technology Company (ITC) - Tehran
+		{Address: "2.188.21.130", Name: "ITC Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Aria Shatel Company Ltd - Tehran
+		{Address: "94.183.42.232", Name: "Shatel Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "85.15.1.10", Name: "Shatel Recursive DNS (Tehran - Primary)", Type: "recursive"},
+		{Address: "85.15.1.12", Name: "Shatel Recursive DNS (Tehran - Secondary)", Type: "recursive"},
+
+		// Asiatech Data Transmission Company - Tehran
+		{Address: "194.225.150.10", Name: "Asiatech Recursive DNS (Tehran - Primary)", Type: "recursive"},
+		{Address: "194.225.150.20", Name: "Asiatech Recursive DNS (Tehran - Secondary)", Type: "recursive"},
+		{Address: "185.98.113.113", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.98.114.114", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.98.115.135", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "37.156.145.18", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "37.156.145.21", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "37.156.145.229", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "77.238.109.196", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "46.245.89.51", Name: "Asiatech Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Parsan Lin Co. PJS / ParsOnline - Tehran
+		{Address: "91.99.101.12", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "82.99.202.164", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "91.98.124.109", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "91.98.64.222", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "82.99.242.155", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "91.99.96.158", Name: "ParsOnline Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Sefroyek Pardaz Engineering Co. LTD - Tehran
+		{Address: "185.128.139.128", Name: "Sefroyek Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.128.139.139", Name: "Sefroyek Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.51.200.10", Name: "Sefroyek Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.51.200.50", Name: "Sefroyek Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.51.200.6", Name: "Sefroyek Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Parvaz System Information Technology Company - Tehran
+		{Address: "185.161.112.33", Name: "Parvaz System Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.161.112.34", Name: "Parvaz System Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.161.112.38", Name: "Parvaz System Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Tehran Municipality ICT Organization - Tehran
+		{Address: "31.24.234.34", Name: "Tehran Municipality Recursive DNS (Primary)", Type: "recursive"},
+		{Address: "31.24.234.35", Name: "Tehran Municipality Recursive DNS (Secondary)", Type: "recursive"},
+		{Address: "31.24.234.37", Name: "Tehran Municipality Recursive DNS (Tertiary)", Type: "recursive"},
+
+		// DATAK Internet Engineering, Inc - Tehran
+		{Address: "94.139.190.190", Name: "DATAK Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Rasana Pishtaz Iranian Service Cooperative Co. - Tehran
+		{Address: "81.163.3.1", Name: "Rasana Pishtaz Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "81.163.3.2", Name: "Rasana Pishtaz Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Kavoshgar Novin Karamad Co.Ltd - Tehran
+		{Address: "45.159.151.220", Name: "Kavoshgar Novin Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Fanavari Serverpars Argham Gostar Company Ltd. - Tehran
+		{Address: "185.55.225.25", Name: "Fanavari Serverpars Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.55.226.26", Name: "Fanavari Serverpars Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.55.226.25", Name: "Fanavari Serverpars Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Dade Pardazi Mobinhost Co LTD - Tehran
+		{Address: "185.53.143.3", Name: "Mobinhost Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "87.107.110.108", Name: "Mobinhost Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Farabord Dadeh Haye Iranian Co. - Tehran
+		{Address: "81.91.144.190", Name: "Farabord Dadeh Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "37.19.90.62", Name: "Farabord Dadeh Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "37.19.90.65", Name: "Farabord Dadeh Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Kish Cell Pars Co. (PJS) - Tehran
+		{Address: "91.245.229.1", Name: "Kish Cell Pars Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "91.245.229.2", Name: "Kish Cell Pars Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Parvaresh Dadeha Co. Private Joint Stock - Tehran
+		{Address: "188.158.158.158", Name: "Parvaresh Dadeha Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "188.159.159.159", Name: "Parvaresh Dadeha Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Fanava Group - Tehran
+		{Address: "185.20.163.2", Name: "Fanava Group Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "95.38.61.50", Name: "Fanava Group Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Respina Networks & Beyond PJSC - Tehran
+		{Address: "2.188.166.22", Name: "Respina Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "5.160.211.66", Name: "Respina Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Rooyekhat Media Company Ltd - Tehran
+		{Address: "185.81.41.81", Name: "Rooyekhat Media Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Pishgaman Toseeh Ertebatat Company - Tehran
+		{Address: "5.202.100.100", Name: "Pishgaman Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "5.202.100.101", Name: "Pishgaman Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "5.202.100.102", Name: "Pishgaman Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "5.202.100.99", Name: "Pishgaman Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "5.202.122.222", Name: "Pishgaman Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Dadeh Gostar Asr Novin P.J.S. Co. - Tehran
+		{Address: "46.224.1.42", Name: "Dadeh Gostar Asr Novin Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "46.224.1.43", Name: "Dadeh Gostar Asr Novin Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Pars Fonoun Ofogh Information Technology and Communications Company LTD - Tehran
+		{Address: "31.24.200.1", Name: "Pars Fonoun Ofogh Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "31.24.200.2", Name: "Pars Fonoun Ofogh Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "31.24.200.3", Name: "Pars Fonoun Ofogh Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "31.24.200.4", Name: "Pars Fonoun Ofogh Recursive DNS (Tehran)", Type: "recursive"},
+
+		// IRAN POST Company - Tehran
+		{Address: "178.215.3.142", Name: "IRAN POST Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Information Technology Company (ITC) - Tehran
+		{Address: "78.38.117.206", Name: "ITC Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "85.185.67.235", Name: "ITC Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Pars Parva System LLC - Tehran
+		{Address: "171.22.26.14", Name: "Pars Parva System Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.8.173.236", Name: "Pars Parva System Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Dade Samane Fanava Company (PJS) - Tehran
+		{Address: "78.157.40.157", Name: "Dade Samane Fanava Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "78.157.40.158", Name: "Dade Samane Fanava Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Institute for Research in Fundamental Sciences - Tehran
+		{Address: "194.225.125.12", Name: "IPM Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "194.225.152.10", Name: "IPM Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "194.225.73.141", Name: "IPM Recursive DNS (Tehran - IRIPM)", Type: "recursive"},
+
+		// Iranian Research Organization for Science & Technology - Tehran (IROST)
+		{Address: "213.176.123.5", Name: "IROST Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Tehran University of Medical Sciences - Tehran
+		{Address: "194.225.62.80", Name: "TUMS Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Iran Cell Service and Communication Company - Tehran
+		{Address: "92.42.49.43", Name: "Iran Cell Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Abramad Technological Infrastructures Development Company PJS - Tehran
+		{Address: "185.187.84.15", Name: "Abramad Recursive DNS (Tehran - Hamkaran System)", Type: "recursive"},
+
+		// Telecommunication Infrastructure Company - Tehran
+		{Address: "2.189.44.44", Name: "TIC Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Noyan Abr Arvan Co. - Tehran / International
+		{Address: "185.231.182.126", Name: "Noyan Abr Arvan Recursive DNS (Tehran)", Type: "recursive"},
+		{Address: "185.97.117.187", Name: "Noyan Abr Arvan Recursive DNS (Tehran - ArvanCloud)", Type: "recursive"},
+		{Address: "185.143.235.253", Name: "Noyan Abr Arvan Recursive DNS (England - ArvanCloud)", Type: "recursive"},
+
+		// AbrArvan CDN and IaaS - Tehran
+		{Address: "37.32.5.60", Name: "AbrArvan CDN Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Tose'h Fanavari Ertebatat Pasargad Arian Co. PJS - Tehran
+		{Address: "81.91.144.116", Name: "Pasargad Arian Recursive DNS (Tehran)", Type: "recursive"},
+
+		// Mobinnet Communication Company - Tehran
+		{Address: "37.156.29.27", Name: "Mobinnet Recursive DNS (Tehran)", Type: "recursive"},
 
 		// ============================================
-		// MAJOR ISP RECURSIVE DNS
+		// ISFAHAN - RECURSIVE DNS SERVERS
 		// ============================================
-		// Aria Shatel PJSC
-		{Address: "85.15.1.10", Name: "Shatel Recursive DNS (Primary)", Type: "recursive"},
-		{Address: "85.15.1.12", Name: "Shatel Recursive DNS (Secondary)", Type: "recursive"},
+		// DCI Infrastructure - Esfahan
+		{Address: "217.219.0.104", Name: "DCI Recursive DNS (Esfahan)", Type: "recursive"},
 
-		// Asiatech Data Transmission Company
-		{Address: "194.225.150.10", Name: "Asiatech Recursive DNS (Primary)", Type: "recursive"},
-		{Address: "194.225.150.20", Name: "Asiatech Recursive DNS (Secondary)", Type: "recursive"},
-
-		// Parsan Lin Co. PJS / ParsOnline
-		{Address: "91.99.101.12", Name: "ParsOnline Recursive DNS", Type: "recursive"},
+		// Gostaresh Ertebat Azin Kia Company PJSC - Isfahan
+		{Address: "185.186.242.161", Name: "Gostaresh Ertebat Azin Kia Recursive DNS (Isfahan)", Type: "recursive"},
 
 		// ============================================
-		// ANTI-SANCTION & GAMING DNS SERVICES
+		// SHIRAZ - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Shiraz
+		{Address: "217.219.96.104", Name: "DCI Recursive DNS (Shiraz)", Type: "recursive"},
+
+		// Iran Telecommunication Company PJS - Fars (Shiraz)
+		{Address: "217.219.250.200", Name: "TCI Recursive DNS (Fars - Shiraz)", Type: "recursive"},
+		{Address: "217.219.250.201", Name: "TCI Recursive DNS (Fars - Shiraz)", Type: "recursive"},
+		{Address: "217.219.250.202", Name: "TCI Recursive DNS (Fars - Shiraz)", Type: "recursive"},
+
+		// Shiraz University - Shiraz
+		{Address: "185.64.179.89", Name: "Shiraz University Recursive DNS", Type: "recursive"},
+
+		// Farzanegan Pars Communications Company PJS - Fars (Shiraz)
+		{Address: "194.60.210.66", Name: "Farzanegan Pars Recursive DNS (Shiraz)", Type: "recursive"},
+
+		// E-Money Net Developers 24 Company - Fars (Shiraz)
+		{Address: "5.145.112.38", Name: "E-Money Net Recursive DNS (Shiraz)", Type: "recursive"},
+		{Address: "5.145.112.39", Name: "E-Money Net Recursive DNS (Shiraz)", Type: "recursive"},
+
+		// ============================================
+		// HAMEDAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Hamedan
+		{Address: "217.219.192.104", Name: "DCI Recursive DNS (Hamedan)", Type: "recursive"},
+
+		// ============================================
+		// TABRIZ - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Tabriz
+		{Address: "217.219.128.104", Name: "DCI Recursive DNS (Tabriz)", Type: "recursive"},
+
+		// Iran Telecommunication Company PJS - Azarbayjan-e Sharqi (East Azerbaijan - Tabriz)
+		{Address: "217.219.132.88", Name: "TCI Recursive DNS (Tabriz)", Type: "recursive"},
+		{Address: "217.219.133.21", Name: "TCI Recursive DNS (Tabriz)", Type: "recursive"},
+		{Address: "80.191.209.105", Name: "TCI Recursive DNS (Tabriz)", Type: "recursive"},
+		{Address: "93.115.231.100", Name: "TCI Recursive DNS (Tabriz)", Type: "recursive"},
+
+		// Bozorg Net-e Aria - Azarbayjan-e Sharqi (East Azerbaijan - Tabriz)
+		{Address: "95.80.184.184", Name: "Bozorg Net-e Aria Recursive DNS (Tabriz)", Type: "recursive"},
+
+		// ============================================
+		// AHVAZ - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Ahvaz
+		{Address: "217.219.224.104", Name: "DCI Recursive DNS (Ahvaz)", Type: "recursive"},
+
+		// ============================================
+		// MASHHAD - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Mashhad
+		{Address: "217.219.64.104", Name: "DCI Recursive DNS (Mashhad)", Type: "recursive"},
+
+		// Razavi Information and communication technology company Plc - Khorasan-e Razavi (Mashhad)
+		{Address: "185.23.131.73", Name: "Razavi Recursive DNS (Mashhad)", Type: "recursive"},
+
+		// Mobin Net Communication Company - Khorasan-e Razavi (Mashhad)
+		{Address: "37.156.29.27", Name: "Mobin Net Recursive DNS (Mashhad)", Type: "recursive"},
+
+		// ============================================
+		// BABOL - RECURSIVE DNS SERVERS
+		// ============================================
+		// DCI Infrastructure - Babol
+		{Address: "217.219.160.104", Name: "DCI Recursive DNS (Babol)", Type: "recursive"},
+
+		// ============================================
+		// ARDABIL - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - Ardabil
+		{Address: "217.219.157.2", Name: "TCI Recursive DNS (Ardabil)", Type: "recursive"},
+
+		// ============================================
+		// AZARBAYJAN-E GHARBI (WEST AZERBAIJAN) - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - Azarbayjan-e Gharbi
+		{Address: "217.219.72.194", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.133", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.134", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.136", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.137", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.138", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "2.185.239.139", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "217.219.103.5", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "78.38.23.216", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+		{Address: "85.185.6.3", Name: "TCI Recursive DNS (West Azerbaijan)", Type: "recursive"},
+
+		// ============================================
+		// BUSHEHR - RECURSIVE DNS SERVERS
+		// ============================================
+		// Pishgaman Toseeh Fanavari Etelaat Va Ertebatat Jonoub - Bushehr
+		{Address: "185.109.74.85", Name: "Pishgaman Toseeh Jonoub Recursive DNS (Bushehr)", Type: "recursive"},
+
+		// Kavoshgar Novin Karamad Co.Ltd - Bushehr
+		{Address: "185.164.73.148", Name: "Kavoshgar Novin Recursive DNS (Bushehr)", Type: "recursive"},
+		{Address: "185.164.73.180", Name: "Kavoshgar Novin Recursive DNS (Bushehr)", Type: "recursive"},
+
+		// ============================================
+		// GILAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// ANDISHE SABZ KHAZAR CO. P.J.S. - Gilan
+		{Address: "89.144.144.144", Name: "ANDISHE SABZ KHAZAR Recursive DNS (Gilan)", Type: "recursive"},
+
+		// Information Technology Company (ITC) - Gilan
+		{Address: "217.219.187.3", Name: "ITC Recursive DNS (Gilan)", Type: "recursive"},
+
+		// ============================================
+		// GOLESTAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - Golestan
+		{Address: "5.200.200.200", Name: "TCI Recursive DNS (Golestan)", Type: "recursive"},
+
+		// ============================================
+		// KERMAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - Kerman
+		{Address: "78.39.101.186", Name: "TCI Recursive DNS (Kerman)", Type: "recursive"},
+
+		// Atrin Information & Communications Technology Company PJS - Kerman
+		{Address: "185.229.29.214", Name: "Atrin Recursive DNS (Kerman)", Type: "recursive"},
+		{Address: "185.229.29.215", Name: "Atrin Recursive DNS (Kerman)", Type: "recursive"},
+
+		// ============================================
+		// LORESTAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Roshangaran Ertebatat Rayaneh - Lorestan
+		{Address: "31.130.180.120", Name: "Roshangaran Ertebatat Rayaneh Recursive DNS (Lorestan)", Type: "recursive"},
+
+		// ============================================
+		// MARKAZI - RECURSIVE DNS SERVERS
+		// ============================================
+		// Rayankadeh Apadana Company Ltd - Markazi
+		{Address: "185.113.59.253", Name: "Rayankadeh Apadana Recursive DNS (Markazi)", Type: "recursive"},
+
+		// ============================================
+		// MAZANDARAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Afranet - Mazandaran
+		{Address: "31.47.37.35", Name: "Afranet Recursive DNS (Mazandaran)", Type: "recursive"},
+		{Address: "31.47.37.92", Name: "Afranet Recursive DNS (Mazandaran)", Type: "recursive"},
+		{Address: "79.175.176.42", Name: "Afranet Recursive DNS (Mazandaran)", Type: "recursive"},
+		{Address: "80.75.5.100", Name: "Afranet Recursive DNS (Mazandaran)", Type: "recursive"},
+
+		// ============================================
+		// QAZVIN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - Qazvin
+		{Address: "217.218.234.221", Name: "TCI Recursive DNS (Qazvin)", Type: "recursive"},
+
+		// ============================================
+		// SEMNAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Mohsen Nikkhah trading as Kardox - Semnan
+		{Address: "194.36.174.161", Name: "Kardox Recursive DNS (Semnan)", Type: "recursive"},
+
+		// ============================================
+		// SOUTH KHORASAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Iran Telecommunication Company PJS - South Khorasan
+		{Address: "78.38.122.12", Name: "TCI Recursive DNS (South Khorasan)", Type: "recursive"},
+		{Address: "85.185.85.6", Name: "TCI Recursive DNS (South Khorasan)", Type: "recursive"},
+
+		// ============================================
+		// YAZD - RECURSIVE DNS SERVERS
+		// ============================================
+		// Pejvak Ertebatat Atiyeh Roshan Company (P.J.S.) - Yazd
+		{Address: "185.11.70.174", Name: "Pejvak Ertebatat Recursive DNS (Yazd)", Type: "recursive"},
+		{Address: "185.83.197.154", Name: "Pejvak Ertebatat Recursive DNS (Yazd)", Type: "recursive"},
+
+		// Iran Telecommunication Company PJS - Yazd
+		{Address: "85.185.157.2", Name: "TCI Recursive DNS (Yazd)", Type: "recursive"},
+
+		// ============================================
+		// ZANJAN - RECURSIVE DNS SERVERS
+		// ============================================
+		// Noyan Abr Arvan Co. - Zanjan
+		{Address: "185.231.182.126", Name: "Noyan Abr Arvan Recursive DNS (Zanjan)", Type: "recursive"},
+
+		// ============================================
+		// ANTI-SANCTION & GAMING DNS SERVICES (Private Networks)
+		// Note: Private IPs (10.x.x.x) only accessible from within Iranian networks
 		// ============================================
 		// 403.online (Anti-Sanction DNS Service)
-		// Note: Private IPs (10.x.x.x) only accessible from within Iranian networks
 		{Address: "10.202.10.202", Name: "403.online DNS (Primary)", Type: "recursive"},
 		{Address: "10.202.10.102", Name: "403.online DNS (Secondary)", Type: "recursive"},
 
@@ -386,53 +716,23 @@ func GetDefaultIranianDNSServers() []DNSServer {
 		{Address: "78.157.42.101", Name: "Electro DNS (Secondary)", Type: "recursive"},
 
 		// Radar Game (Gaming DNS Service)
-		// Note: Private IP (10.x.x.x) only accessible from within Iranian networks
 		{Address: "10.202.10.10", Name: "Radar Game DNS", Type: "recursive"},
 
 		// Begzar (Anti-Sanction DNS Service)
-		{Address: "185.55.226.26", Name: "Begzar DNS (Primary)", Type: "recursive"},
-		{Address: "185.55.226.25", Name: "Begzar DNS (Secondary)", Type: "recursive"},
+		// Note: Already listed in Fanavari Serverpars section above
+		// {Address: "185.55.226.26", Name: "Begzar DNS (Primary)", Type: "recursive"},
+		// {Address: "185.55.226.25", Name: "Begzar DNS (Secondary)", Type: "recursive"},
+
+		// Shecan (Anti-Sanction DNS Service)
+		{Address: "178.22.122.100", Name: "Shecan DNS (Primary)", Type: "recursive"},
+		{Address: "185.51.200.2", Name: "Shecan DNS (Secondary)", Type: "recursive"},
 
 		// ============================================
-		// CLOUD PROVIDER RECURSIVE DNS
+		// INTERNATIONAL (Outside Iran)
 		// ============================================
-		// Arvan Cloud / Abrarvan (Noyan Abr Arvan Co)
-		{Address: "185.97.117.187", Name: "ArvanCloud Recursive DNS", Type: "recursive"},
-
-		// Shahrad / Sefroyek
-		{Address: "185.51.200.50", Name: "Shahrad/Sefroyek DNS", Type: "recursive"},
-
-		// ============================================
-		// ACADEMIC & RESEARCH RECURSIVE DNS
-		// ============================================
-		// Institute for Research in Fundamental Sciences (IPM/IRIPM)
-		{Address: "194.225.73.141", Name: "IRIPM Recursive DNS (persia.iranet.ir)", Type: "recursive"},
-
-		// Iran Organization for Science & Technology (IROST)
-		{Address: "213.176.123.5", Name: "IROST Recursive DNS", Type: "recursive"},
-
-		// Tehran University of Medical Sciences (TUMS)
-		{Address: "194.225.62.80", Name: "TUMS Recursive DNS (ourdns1.tums.ac.ir)", Type: "recursive"},
-
-		// ============================================
-		// REGIONAL & MUNICIPAL RECURSIVE DNS
-		// ============================================
-		// Tehran Municipality ICT Organization
-		{Address: "31.24.234.34", Name: "Tehran Municipality DNS (Primary)", Type: "recursive"},
-		{Address: "31.24.234.35", Name: "Tehran Municipality DNS (Secondary)", Type: "recursive"},
-		{Address: "31.24.234.37", Name: "Tehran Municipality DNS (Tertiary)", Type: "recursive"},
-
-		// Kish Cell Pars (KCP Cloud)
-		{Address: "91.245.229.1", Name: "Kish Cell Pars DNS", Type: "recursive"},
-
-		// ============================================
-		// OTHER PROVIDERS - RECURSIVE DNS
-		// ============================================
-		// Hamkaran System
-		{Address: "185.187.84.15", Name: "Hamkaran System DNS", Type: "recursive"},
-
-		// Tehran (General/Unspecified Provider)
-		{Address: "37.156.145.229", Name: "Tehran Public DNS", Type: "recursive"},
+		// Iran Telecommunication Company PJS (Madrid, Spain)
+		{Address: "212.80.20.243", Name: "TCI Recursive DNS (Madrid, Spain)", Type: "recursive"},
+		{Address: "212.80.20.244", Name: "TCI Recursive DNS (Madrid, Spain)", Type: "recursive"},
 	}
 }
 
