@@ -365,58 +365,187 @@ func (b *Bot) formatASNStatus(result *models.MonitoringResult) string {
 	return builder.String()
 }
 
-// formatDNSStatus formats DNS server status
+// dnsEntry represents a DNS server entry for grouping
+type dnsEntry struct {
+	addr    string
+	status  *models.DNSStatus
+	city    string
+	dnsType string
+	alive   bool
+}
+
+// parseCityFromName extracts city from DNS server name (e.g., "DNS (Tehran)" -> "Tehran")
+func parseCityFromName(name string) string {
+	// Look for city in parentheses, e.g., "(Tehran)", "(Tehran - Primary)", "(Madrid, Spain)"
+	start := strings.LastIndex(name, "(")
+	end := strings.LastIndex(name, ")")
+	if start != -1 && end != -1 && end > start {
+		city := name[start+1 : end]
+		// Remove qualifiers like "- Primary" or ", Spain" - keep only city name
+		if idx := strings.Index(city, " - "); idx != -1 {
+			city = city[:idx]
+		}
+		if idx := strings.Index(city, ","); idx != -1 {
+			city = city[:idx]
+		}
+		return strings.TrimSpace(city)
+	}
+	// Default to "Other" if no city found
+	return "Other"
+}
+
+// parseTypeFromName determines if DNS server is authoritative or recursive
+func parseTypeFromName(name string) string {
+	nameLower := strings.ToLower(name)
+	if strings.Contains(nameLower, "recursive dns") || strings.Contains(nameLower, "recursive") {
+		return "recursive"
+	}
+	if strings.Contains(nameLower, "ns") && (strings.Contains(nameLower, "authoritative") || strings.Contains(nameLower, "(ns")) {
+		return "authoritative"
+	}
+	// Default based on common patterns
+	if strings.Contains(nameLower, "nic.ir") || strings.Contains(nameLower, "(ns") {
+		return "authoritative"
+	}
+	return "recursive"
+}
+
+// formatDNSStatus formats DNS server status organized by city and type
 func (b *Bot) formatDNSStatus(result *models.MonitoringResult) string {
 	var builder strings.Builder
 	
-	builder.WriteString("🔍 *DNS Servers*\n")
-	builder.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	builder.WriteString("🔍 *DNS Servers Status*\n")
+	builder.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	
 	aliveCount := 0
 	dnsTotal := len(result.DNSStatuses)
 	
-	// Sort DNS servers (alive first)
-	type dnsEntry struct {
-		addr    string
-		status  *models.DNSStatus
-		alive   bool
-	}
-	var dnsEntries []dnsEntry
+	// Group DNS servers by city and type
+	entries := make([]dnsEntry, 0, dnsTotal)
+	cityTypeMap := make(map[string]map[string][]dnsEntry) // city -> type -> entries
+	
 	for addr, status := range result.DNSStatuses {
-		dnsEntries = append(dnsEntries, dnsEntry{addr: addr, status: status, alive: status.Alive})
+		city := parseCityFromName(status.Name)
+		dnsType := parseTypeFromName(status.Name)
+		
+		entry := dnsEntry{
+			addr:    addr,
+			status:  status,
+			city:    city,
+			dnsType: dnsType,
+			alive:   status.Alive,
+		}
+		
 		if status.Alive {
 			aliveCount++
 		}
+		
+		entries = append(entries, entry)
+		
+		// Group by city and type
+		if cityTypeMap[city] == nil {
+			cityTypeMap[city] = make(map[string][]dnsEntry)
+		}
+		cityTypeMap[city][dnsType] = append(cityTypeMap[city][dnsType], entry)
 	}
 	
-	// Sort: alive first, then by name
-	for i := 0; i < len(dnsEntries)-1; i++ {
-		for j := i + 1; j < len(dnsEntries); j++ {
-			if dnsEntries[i].alive != dnsEntries[j].alive {
-				if !dnsEntries[i].alive && dnsEntries[j].alive {
-					dnsEntries[i], dnsEntries[j] = dnsEntries[j], dnsEntries[i]
-				}
-			} else if dnsEntries[i].status.Name > dnsEntries[j].status.Name {
-				dnsEntries[i], dnsEntries[j] = dnsEntries[j], dnsEntries[i]
-			}
+	// Define city display order (most important cities first)
+	cityOrder := []string{
+		"Tehran", "Esfahan", "Isfahan", "Shiraz", "Mashhad", "Tabriz",
+		"Ahvaz", "Hamedan", "Babol", "Ardabil", "West Azerbaijan",
+		"Bushehr", "Gilan", "Golestan", "Kerman", "Lorestan", "Markazi",
+		"Mazandaran", "Qazvin", "Semnan", "South Khorasan", "Yazd", "Zanjan",
+		"England", "Madrid", "Spain", "Other",
+	}
+	
+	citySeen := make(map[string]bool)
+	
+	// First, print cities in order
+	for _, city := range cityOrder {
+		if types, exists := cityTypeMap[city]; exists {
+			citySeen[city] = true
+			printCitySection(&builder, city, types)
 		}
 	}
 	
-	for _, entry := range dnsEntries {
-		icon := "🔴"
-		if entry.status.Alive {
-			icon = "🟢"
-		}
-		responseTime := entry.status.ResponseTime.Milliseconds()
-		builder.WriteString(fmt.Sprintf("%s *%s*\n   └─ `%s` - %dms\n", 
-			icon, entry.status.Name, entry.addr, responseTime))
-		if entry.status.Error != "" {
-			builder.WriteString(fmt.Sprintf("   └─ ⚠️ Error: %s\n", entry.status.Error))
+	// Then, print any remaining cities not in the order
+	for city, types := range cityTypeMap {
+		if !citySeen[city] {
+			printCitySection(&builder, city, types)
 		}
 	}
 	
-	builder.WriteString(fmt.Sprintf("\n📈 *Summary:* %d/%d Alive\n", aliveCount, dnsTotal))
+	builder.WriteString("\n")
+	builder.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	builder.WriteString(fmt.Sprintf("📈 *Summary:* %d/%d Alive\n", aliveCount, dnsTotal))
 	
 	return builder.String()
+}
+
+// printCitySection prints all DNS servers for a city, grouped by type
+func printCitySection(builder *strings.Builder, city string, types map[string][]dnsEntry) {
+	builder.WriteString(fmt.Sprintf("🏙️  *%s*\n", city))
+	
+	// Print authoritative first, then recursive
+	typeOrder := []string{"authoritative", "recursive"}
+	
+	for _, dnsType := range typeOrder {
+		entries, exists := types[dnsType]
+		if !exists || len(entries) == 0 {
+			continue
+		}
+		
+		typeEmoji := "📡"
+		typeLabel := "Authoritative"
+		if dnsType == "recursive" {
+			typeEmoji = "🔄"
+			typeLabel = "Recursive"
+		}
+		
+		builder.WriteString(fmt.Sprintf("   %s *%s DNS*\n", typeEmoji, typeLabel))
+		
+		// Sort entries: alive first, then by name
+		for i := 0; i < len(entries)-1; i++ {
+			for j := i + 1; j < len(entries); j++ {
+				if entries[i].alive != entries[j].alive {
+					if !entries[i].alive && entries[j].alive {
+						entries[i], entries[j] = entries[j], entries[i]
+					}
+				} else if entries[i].status.Name > entries[j].status.Name {
+					entries[i], entries[j] = entries[j], entries[i]
+				}
+			}
+		}
+		
+		// Print each server
+		for _, entry := range entries {
+			icon := "🔴"
+			if entry.status.Alive {
+				icon = "🟢"
+			}
+			
+			// Clean up name (remove city from display since we're already showing it)
+			displayName := entry.status.Name
+			cityInParen := fmt.Sprintf("(%s", city)
+			if idx := strings.Index(displayName, cityInParen); idx != -1 {
+				// Remove "(City)" or "(City - ...)" from name
+				if endIdx := strings.Index(displayName[idx:], ")"); endIdx != -1 {
+					fullMatch := displayName[idx : idx+endIdx+1]
+					displayName = strings.Replace(displayName, fullMatch, "", 1)
+					displayName = strings.TrimSpace(displayName)
+				}
+			}
+			
+			responseTime := entry.status.ResponseTime.Milliseconds()
+			builder.WriteString(fmt.Sprintf("      %s *%s*\n         └─ `%s` - %dms\n",
+				icon, displayName, entry.addr, responseTime))
+			if entry.status.Error != "" && !entry.status.Alive {
+				// Only show error if server is offline
+				builder.WriteString(fmt.Sprintf("         └─ ⚠️ %s\n", entry.status.Error))
+			}
+		}
+		builder.WriteString("\n")
+	}
 }
 
 // sendMessage sends a message to a chat (user or channel)
