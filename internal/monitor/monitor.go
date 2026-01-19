@@ -145,12 +145,16 @@ func (m *Monitor) updateResults(ctx context.Context) {
 	asnTrafficRaw, err := m.trafficMonitor.FetchASNTrafficFromCloudflare(ctx, m.config.IranASNs)
 	if err != nil {
 		log.Printf("⚠️  Failed to fetch ASN traffic data: %v", err)
+		// Don't set asnTrafficList - will be nil/empty, chart will be skipped
 	} else if len(asnTrafficRaw) > 0 {
+		log.Printf("✅ Fetched ASN traffic data for %d ASNs, generating chart...", len(asnTrafficRaw))
 		// Generate ASN traffic chart
 		asnChartBuffer, err := GenerateASNTrafficChart(asnTrafficRaw)
 		if err != nil {
 			log.Printf("⚠️  Failed to generate ASN traffic chart: %v", err)
 			asnChartBuffer = nil
+		} else {
+			log.Printf("✅ ASN traffic chart generated successfully (buffer size: %d bytes)", asnChartBuffer.Len())
 		}
 		
 		// Add chart buffer to each ASN traffic data item (all items share the same chart)
@@ -158,6 +162,8 @@ func (m *Monitor) updateResults(ctx context.Context) {
 			item.ChartBuffer = asnChartBuffer
 			asnTrafficList = append(asnTrafficList, item)
 		}
+	} else {
+		log.Printf("⚠️  ASN traffic data is empty (no matching ASNs or no data available)")
 	}
 
 	m.results = &models.MonitoringResult{

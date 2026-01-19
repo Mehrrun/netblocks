@@ -628,10 +628,11 @@ func (tm *TrafficMonitor) Start(ctx context.Context) {
 // Returns top 20 Iranian ASNs by traffic volume
 func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, iranASNs []string) ([]*models.ASTrafficData, error) {
 	// Cloudflare Radar API endpoint for ASN-level traffic summary
-	// Using netflows/summary/asn endpoint to get traffic distribution by ASN
+	// Using HTTP summary with dimension=asn to get traffic distribution by ASN
 	// location: IR for Iran
 	// dateRange: 1d for last 24 hours
-	url := "https://api.cloudflare.com/client/v4/radar/netflows/summary/asn?location=IR&dateRange=1d&format=json"
+	// Note: This endpoint might return data in a different structure than netflows
+	url := "https://api.cloudflare.com/client/v4/radar/http/summary/asn?location=IR&dateRange=1d&format=json"
 
 	log.Printf("Fetching Cloudflare Radar ASN traffic data from: %s", url)
 
@@ -695,6 +696,16 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 	}
 
 	// Parse the result to extract ASN traffic data
+	// Define a structure to hold parsed ASN items
+	type asnItem struct {
+		ASN    interface{} `json:"asn"`
+		Value  float64     `json:"value"`
+		Change float64     `json:"change,omitempty"`
+	}
+	
+	var summaryData []asnItem
+	
+	// Try standard structure first
 	var result struct {
 		Meta struct {
 			DateRange []struct {
@@ -702,28 +713,88 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 				EndTime   string `json:"endTime"`
 			} `json:"dateRange"`
 		} `json:"meta"`
-		Summary []struct {
-			ASN    int     `json:"asn"`
-			Value  float64 `json:"value"`
-			Change float64 `json:"change,omitempty"`
-		} `json:"summary"`
+		Summary []asnItem `json:"summary"`
+		Top     []asnItem `json:"top"`
 	}
 
-	if err := json.Unmarshal(apiResp.Result, &result); err != nil {
-		log.Printf("Error parsing ASN traffic result: %v", err)
-		return nil, fmt.Errorf("error parsing result: %w", err)
+	if err := json.Unmarshal(apiResp.Result, &result); err == nil {
+		// Use Summary or Top field, whichever has data
+		if len(result.Summary) > 0 {
+			summaryData = result.Summary
+		} else if len(result.Top) > 0 {
+			log.Printf("Using 'top' field instead of 'summary' - found %d items", len(result.Top))
+			summaryData = result.Top
+		}
+	}
+	
+	// If still no data, try to parse as raw map to see structure
+	if len(summaryData) == 0 {
+		log.Printf("⚠️  Could not parse ASN traffic result with expected structures")
+		if len(apiResp.Result) > 0 {
+			resultStr := string(apiResp.Result)
+			if len(resultStr) > 1000 {
+				resultStr = resultStr[:1000] + "..."
+			}
+			log.Printf("Response result: %s", resultStr)
+		}
+		
+		// Try to parse as raw map to see structure
+		var rawResult map[string]interface{}
+		if jsonErr := json.Unmarshal(apiResp.Result, &rawResult); jsonErr == nil {
+			log.Printf("Response top-level keys: %v", getKeys(rawResult))
+			// Check for various possible field names
+			for _, key := range []string{"summary", "top", "data", "results", "asns", "asn"} {
+				if val, ok := rawResult[key]; ok {
+					log.Printf("Found field '%s': %T", key, val)
+					if arr, ok := val.([]interface{}); ok {
+						log.Printf("  Array length: %d", len(arr))
+						if len(arr) > 0 {
+							log.Printf("  First item type: %T, value: %v", arr[0], arr[0])
+							// Try to extract ASN data from this array
+							for _, item := range arr {
+								if itemMap, ok := item.(map[string]interface{}); ok {
+									var asnVal interface{}
+									var value float64
+									// Check various possible ASN field names
+									for _, asnKey := range []string{"asn", "as", "as_number", "asNumber"} {
+										if asn, ok := itemMap[asnKey]; ok {
+											asnVal = asn
+											break
+										}
+									}
+									// Check various possible value field names
+									for _, valKey := range []string{"value", "count", "requests", "bytes", "traffic"} {
+										if val, ok := itemMap[valKey].(float64); ok {
+											value = val
+											break
+										}
+									}
+									if asnVal != nil && value > 0 {
+										summaryData = append(summaryData, asnItem{ASN: asnVal, Value: value})
+									}
+								}
+							}
+						}
+					} else if valMap, ok := val.(map[string]interface{}); ok {
+						log.Printf("  Map keys: %v", getKeys(valMap))
+					}
+				}
+			}
+		}
 	}
 
-	if len(result.Summary) == 0 {
-		log.Printf("Cloudflare ASN API returned empty summary data")
-		return nil, fmt.Errorf("no ASN traffic data available")
+	if len(summaryData) == 0 {
+		log.Printf("⚠️  No ASN traffic data available after parsing - will skip ASN chart")
+		return []*models.ASTrafficData{}, nil
 	}
 
 	// Calculate total traffic for percentage calculation
 	var totalTraffic float64
-	for _, item := range result.Summary {
+	for _, item := range summaryData {
 		totalTraffic += item.Value
 	}
+
+	log.Printf("Total ASN traffic from API: %f, Found %d ASNs in response", totalTraffic, len(summaryData))
 
 	// Create a map of Iranian ASNs for quick lookup
 	iranASNMap := make(map[string]bool)
@@ -732,12 +803,44 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 		asnNum := strings.TrimPrefix(asn, "AS")
 		iranASNMap[asnNum] = true
 	}
+	log.Printf("Looking for %d configured Iranian ASNs in API response", len(iranASNMap))
+	
+	// Log first few ASNs from API for debugging
+	log.Printf("First 5 ASNs from API response:")
+	for i, item := range summaryData {
+		if i >= 5 {
+			break
+		}
+		log.Printf("  ASN %v, Value: %f", item.ASN, item.Value)
+	}
 
 	// Filter and process ASN traffic data
 	asnTrafficList := make([]*models.ASTrafficData, 0)
-	for _, item := range result.Summary {
-		asnStr := fmt.Sprintf("AS%d", item.ASN)
-		asnNumStr := fmt.Sprintf("%d", item.ASN)
+	for _, item := range summaryData {
+		// Handle ASN as either int or string
+		var asnNum int
+		var asnStr, asnNumStr string
+		
+		switch v := item.ASN.(type) {
+		case float64:
+			asnNum = int(v)
+			asnStr = fmt.Sprintf("AS%d", asnNum)
+			asnNumStr = fmt.Sprintf("%d", asnNum)
+		case int:
+			asnNum = v
+			asnStr = fmt.Sprintf("AS%d", asnNum)
+			asnNumStr = fmt.Sprintf("%d", asnNum)
+		case string:
+			asnStr = v
+			asnNumStr = strings.TrimPrefix(v, "AS")
+			// Try to parse as int for comparison
+			if parsed, err := strconv.Atoi(asnNumStr); err == nil {
+				asnNum = parsed
+			}
+		default:
+			log.Printf("Unexpected ASN type: %T, value: %v", item.ASN, item.ASN)
+			continue
+		}
 		
 		// Check if this ASN is in our Iranian ASN list
 		if !iranASNMap[asnNumStr] {
@@ -785,7 +888,19 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 		asnTrafficList = asnTrafficList[:20]
 	}
 
-	log.Printf("Successfully fetched ASN traffic data for %d Iranian ASNs", len(asnTrafficList))
+	if len(asnTrafficList) == 0 {
+		log.Printf("⚠️  No Iranian ASNs matched in API response - will skip ASN chart")
+		log.Printf("Configured ASN count: %d, API response ASN count: %d", len(iranASNMap), len(summaryData))
+		return []*models.ASTrafficData{}, nil
+	}
+
+	// Log top ASNs
+	topNames := make([]string, 0, min(3, len(asnTrafficList)))
+	for i := 0; i < min(3, len(asnTrafficList)); i++ {
+		topNames = append(topNames, asnTrafficList[i].Name)
+	}
+	log.Printf("✅ Successfully fetched ASN traffic data for %d Iranian ASNs (top ASNs: %v)", 
+		len(asnTrafficList), topNames)
 	return asnTrafficList, nil
 }
 
