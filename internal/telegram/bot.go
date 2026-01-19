@@ -830,12 +830,14 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 }
 
 // sendASNTrafficChart sends the ASN traffic chart as a photo with caption
+// Follows the exact same pattern as sendTrafficChart for consistency
 func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficData, chartBuffer *bytes.Buffer) {
 	if len(data) == 0 || chartBuffer == nil || chartBuffer.Len() == 0 {
+		log.Printf("⚠️  ASN traffic chart data or buffer is empty - skipping send")
 		return
 	}
 	
-	// Create caption with summary
+	// Create caption with summary - similar to FormatTrafficStatus
 	var caption strings.Builder
 	caption.WriteString(fmt.Sprintf("📊 *Top %d Iranian ASNs by Traffic*\n\n", len(data)))
 	
@@ -855,6 +857,7 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 		caption.WriteString(fmt.Sprintf("\n... and %d more ASNs (see chart)", len(data)-maxShow))
 	}
 	
+	// Use same pattern as sendTrafficChart
 	fileBytes := tgbotapi.FileBytes{
 		Name:  "asn_traffic_top20.png",
 		Bytes: chartBuffer.Bytes(),
@@ -867,12 +870,18 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 	case string:
 		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
 	default:
+		log.Printf("Error: invalid chatID type for ASN chart: %T", chatID)
 		return
 	}
 	
 	photo.Caption = caption.String()
 	photo.ParseMode = tgbotapi.ModeMarkdown
 	
-	_, _ = b.api.Send(photo)
+	_, err := b.api.Send(photo)
+	if err != nil {
+		log.Printf("Error sending ASN traffic chart: %v", err)
+	} else {
+		log.Printf("✅ ASN traffic chart sent successfully")
+	}
 }
 

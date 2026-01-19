@@ -150,84 +150,75 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
 }
 
-// GenerateASNTrafficChart generates a vertical bar chart for ASN traffic data
+// GenerateASNTrafficChart generates a line chart style visualization for ASN traffic data
+// Follows the exact same pattern as GenerateTrafficChart for consistency
 func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("no ASN traffic data available")
 	}
 
 	// Limit to top 20 ASNs (already sorted by traffic volume)
-	maxBars := 20
-	if len(data) > maxBars {
-		data = data[:maxBars]
+	maxItems := 20
+	if len(data) > maxItems {
+		data = data[:maxItems]
 	}
 
-	// Prepare data for chart - use vertical bar chart (standard approach)
+	// Prepare X values (ASN index) - similar to working chart pattern
 	xValues := make([]float64, len(data))
-	yValues := make([]float64, len(data))
-	labels := make([]string, len(data))
-	colors := make([]drawing.Color, len(data))
+	for i := range xValues {
+		xValues[i] = float64(i) // ASN index: 0, 1, 2, ...
+	}
 
-	// Get max percentage for Y-axis range
+	// Prepare Y values (traffic percentage) - similar to working chart pattern
+	yValues := make([]float64, len(data))
 	maxPercentage := 0.0
-	for _, item := range data {
+	for i, item := range data {
+		yValues[i] = item.Percentage
 		if item.Percentage > maxPercentage {
 			maxPercentage = item.Percentage
 		}
 	}
 
-	// Prepare values (use percentage for better readability)
-	for i, item := range data {
-		// X-axis: index position
-		xValues[i] = float64(i)
-		
-		// Y-axis: percentage value
-		yValues[i] = item.Percentage
-		
-		// Create label: ASN name (truncate if too long for readability)
-		label := item.Name
-		if len(label) > 25 {
-			label = label[:22] + "..."
-		}
-		// Use shorter label with percentage for display
-		labels[i] = label
-
-		// Color-code bars based on status
-		switch item.Status {
+	// Determine line color based on average status or use a default
+	// Use blue as default (matching working chart pattern)
+	var lineColor drawing.Color = chart.ColorBlue
+	if len(data) > 0 {
+		// Use color of top ASN as line color
+		switch data[0].Status {
 		case "High":
-			colors[i] = drawing.Color{R: 76, G: 175, B: 80, A: 255} // Green
+			lineColor = drawing.Color{R: 76, G: 175, B: 80, A: 255} // Green
 		case "Medium":
-			colors[i] = drawing.Color{R: 255, G: 193, B: 7, A: 255} // Yellow
+			lineColor = drawing.Color{R: 255, G: 193, B: 7, A: 255} // Yellow
 		case "Low":
-			colors[i] = drawing.Color{R: 255, G: 152, B: 0, A: 255} // Orange
+			lineColor = drawing.Color{R: 255, G: 152, B: 0, A: 255} // Orange
 		default:
-			colors[i] = drawing.Color{R: 200, G: 200, B: 200, A: 255} // Gray
+			lineColor = chart.ColorBlue
 		}
 	}
 
-	// Create vertical bar chart - using stacked bars approach
-	// We'll create bars by drawing filled rectangles using Value series
+	// Create the chart - following exact same pattern as GenerateTrafficChart
 	graph := chart.Chart{
-		Width:  1200,
-		Height: 700, // Taller to accommodate 20 bars and labels
+		Width:  800,  // Same width as working chart
+		Height: 400,  // Same height as working chart
 		Background: chart.Style{
 			Padding: chart.Box{
 				Top:    50,
-				Left:   50,
-				Right:  30,
-				Bottom: 200, // More bottom padding for rotated ASN labels
+				Left:   20,
+				Right:  20,
+				Bottom: 20,
 			},
 			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255}, // White background
 		},
 		XAxis: chart.XAxis{
-			Name:      "ASN",
+			Name:      "ASN (Top 20)",
 			NameStyle: chart.Style{},
 			Style:     chart.Style{},
 			ValueFormatter: func(v interface{}) string {
-				if idx, ok := v.(float64); ok {
-					i := int(idx)
-					if i >= 0 && i < len(labels) {
-						return labels[i]
+				if vf, ok := v.(float64); ok {
+					idx := int(vf)
+					if idx >= 0 && idx < len(data) {
+						// Show ASN number instead of index
+						return fmt.Sprintf("%d", idx+1)
 					}
 				}
 				return ""
@@ -239,7 +230,7 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 			Style:     chart.Style{},
 			Range: &chart.ContinuousRange{
 				Min: 0,
-				Max: maxPercentage * 1.15, // Add 15% padding for better visibility
+				Max: maxPercentage * 1.1, // Add 10% padding
 			},
 			ValueFormatter: func(v interface{}) string {
 				if vf, ok := v.(float64); ok {
@@ -248,33 +239,28 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 				return ""
 			},
 		},
-	}
-
-	// Create bars using histogram-style visualization
-	// Each bar is created by drawing a filled area from 0 to value
-	for i := range xValues {
-		// Create a bar by drawing from x to x+barWidth, from 0 to yValue
-		barWidth := 0.6 // Width of each bar
-		barSeries := chart.ContinuousSeries{
-			XValues: []float64{xValues[i], xValues[i] + barWidth, xValues[i] + barWidth, xValues[i]},
-			YValues: []float64{0, 0, yValues[i], yValues[i]}, // Rectangle: bottom-left, bottom-right, top-right, top-left
-			Style: chart.Style{
-				StrokeColor:     colors[i],
-				FillColor:       colors[i],
-				StrokeWidth:     2,
-				DotWidth:        0,
+		Series: []chart.Series{
+			chart.ContinuousSeries{
+				Name:    "ASN Traffic",
+				XValues: xValues,
+				YValues: yValues,
+				Style: chart.Style{
+					StrokeColor: lineColor,
+					StrokeWidth: 3,
+					DotWidth:    5, // Add visible dots at each ASN point
+					DotColor:    lineColor,
+				},
 			},
-		}
-		graph.Series = append(graph.Series, barSeries)
+		},
 	}
 
-	// Add title
+	// Add title - similar to working chart
 	graph.Title = fmt.Sprintf("Top %d Iranian ASNs by Traffic (Current)", len(data))
 	graph.TitleStyle = chart.Style{
 		FontSize: 16,
 	}
 
-	// Render to buffer
+	// Render to buffer - same pattern as working chart
 	buffer := bytes.NewBuffer([]byte{})
 	err := graph.Render(chart.PNG, buffer)
 	if err != nil {

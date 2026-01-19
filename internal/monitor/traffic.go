@@ -626,13 +626,14 @@ func (tm *TrafficMonitor) Start(ctx context.Context) {
 
 // FetchASNTrafficFromCloudflare fetches ASN-level traffic data from Cloudflare Radar API
 // Returns top 20 Iranian ASNs by traffic volume
+// Follows the same pattern as FetchFromCloudflare for consistency
 func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, iranASNs []string) ([]*models.ASTrafficData, error) {
-	// Cloudflare Radar API endpoint for ASN-level traffic summary
-	// Using HTTP summary with dimension=asn to get traffic distribution by ASN
+	// Cloudflare Radar API endpoint for ASN-level traffic
+	// Using /radar/http/top/asn to get top ASNs by traffic
 	// location: IR for Iran
 	// dateRange: 1d for last 24 hours
-	// Note: This endpoint might return data in a different structure than netflows
-	url := "https://api.cloudflare.com/client/v4/radar/http/summary/asn?location=IR&dateRange=1d&format=json"
+	// Following same pattern as working FetchFromCloudflare endpoint
+	url := "https://api.cloudflare.com/client/v4/radar/http/top/asn?location=IR&dateRange=1d&format=json"
 
 	log.Printf("Fetching Cloudflare Radar ASN traffic data from: %s", url)
 
@@ -644,31 +645,42 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 
 	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
 	
-	// Add Cloudflare authentication headers
+	// Add Cloudflare authentication headers - match working pattern exactly
+	authMethod := "none"
 	if tm.cloudflareToken != "" {
 		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+		authMethod = "Bearer Token"
+		log.Printf("Using Cloudflare Bearer Token authentication for ASN traffic (token length: %d)", len(tm.cloudflareToken))
 	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
 		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
 		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
+		authMethod = "API Key"
+		log.Printf("Using Cloudflare API Key authentication for ASN traffic (email: %s)", tm.cloudflareEmail)
 	} else {
+		log.Printf("WARNING: No Cloudflare credentials available for ASN traffic - request will likely fail")
 		return nil, fmt.Errorf("no Cloudflare credentials available")
 	}
 
 	resp, err := tm.client.Do(req)
 	if err != nil {
-		log.Printf("Error making HTTP request to Cloudflare ASN endpoint: %v", err)
+		log.Printf("Error making HTTP request to Cloudflare ASN endpoint: %v (auth method: %s)", err, authMethod)
 		return nil, fmt.Errorf("error making HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Read response body first (even if error) to see what Cloudflare says - match working pattern
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Error reading ASN traffic response body: %v", err)
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
+	log.Printf("Cloudflare ASN API response: Status %d %s (auth method: %s)", resp.StatusCode, resp.Status, authMethod)
+
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Cloudflare ASN API returned non-200 status: %d %s", resp.StatusCode, resp.Status)
+		log.Printf("Cloudflare ASN API returned non-200 status. Response body: %s", string(bodyBytes))
+		
+		// Try to parse error response - match working pattern
 		var errorResp struct {
 			Success bool `json:"success"`
 			Errors  []struct {
@@ -681,18 +693,27 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 				log.Printf("Cloudflare ASN API error %d: %s", err.Code, err.Message)
 			}
 		}
-		return nil, fmt.Errorf("Cloudflare API returned status %d %s", resp.StatusCode, resp.Status)
+		
+		return nil, fmt.Errorf("cloudflare ASN API status %d", resp.StatusCode)
 	}
 
 	var apiResp CloudflareRadarResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		log.Printf("Error decoding ASN traffic JSON response: %v", err)
+		log.Printf("Response body (first 500 chars): %s", string(bodyBytes[:min(500, len(bodyBytes))]))
 		return nil, fmt.Errorf("error decoding JSON response: %w", err)
 	}
 
 	if !apiResp.Success {
-		log.Printf("Cloudflare ASN API returned success=false")
-		return nil, fmt.Errorf("Cloudflare API returned success=false")
+		if len(apiResp.Errors) > 0 {
+			log.Printf("Cloudflare ASN API returned success=false with errors:")
+			for _, err := range apiResp.Errors {
+				log.Printf("  Error %d: %s", err.Code, err.Message)
+			}
+		} else {
+			log.Printf("Cloudflare ASN API returned success=false (no error details provided)")
+		}
+		return nil, fmt.Errorf("cloudflare ASN API returned success=false")
 	}
 
 	// Parse the result to extract ASN traffic data
@@ -785,8 +806,11 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 
 	if len(summaryData) == 0 {
 		log.Printf("⚠️  No ASN traffic data available after parsing - will skip ASN chart")
+		log.Printf("Full response body (first 2000 chars): %s", string(bodyBytes[:min(2000, len(bodyBytes))]))
 		return []*models.ASTrafficData{}, nil
 	}
+
+	log.Printf("Cloudflare ASN API success - received %d ASNs in response", len(summaryData))
 
 	// Calculate total traffic for percentage calculation
 	var totalTraffic float64
@@ -894,12 +918,12 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 		return []*models.ASTrafficData{}, nil
 	}
 
-	// Log top ASNs
+	// Log top ASNs - matching working chart pattern
 	topNames := make([]string, 0, min(3, len(asnTrafficList)))
 	for i := 0; i < min(3, len(asnTrafficList)); i++ {
 		topNames = append(topNames, asnTrafficList[i].Name)
 	}
-	log.Printf("✅ Successfully fetched ASN traffic data for %d Iranian ASNs (top ASNs: %v)", 
+	log.Printf("ASN traffic data processed successfully - %d Iranian ASNs found (top ASNs: %v)", 
 		len(asnTrafficList), topNames)
 	return asnTrafficList, nil
 }
