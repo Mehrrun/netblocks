@@ -140,11 +140,32 @@ func (m *Monitor) updateResults(ctx context.Context) {
 		}
 	}
 
+	// Fetch ASN-level traffic data
+	var asnTrafficList []*models.ASTrafficData
+	asnTrafficRaw, err := m.trafficMonitor.FetchASNTrafficFromCloudflare(ctx, m.config.IranASNs)
+	if err != nil {
+		log.Printf("⚠️  Failed to fetch ASN traffic data: %v", err)
+	} else if len(asnTrafficRaw) > 0 {
+		// Generate ASN traffic chart
+		asnChartBuffer, err := GenerateASNTrafficChart(asnTrafficRaw)
+		if err != nil {
+			log.Printf("⚠️  Failed to generate ASN traffic chart: %v", err)
+			asnChartBuffer = nil
+		}
+		
+		// Add chart buffer to each ASN traffic data item (all items share the same chart)
+		for _, item := range asnTrafficRaw {
+			item.ChartBuffer = asnChartBuffer
+			asnTrafficList = append(asnTrafficList, item)
+		}
+	}
+
 	m.results = &models.MonitoringResult{
-		Timestamp:   time.Now(),
-		ASNStatuses: asnStatuses,
-		DNSStatuses: dnsStatuses,
-		TrafficData: trafficModelData,
+		Timestamp:    time.Now(),
+		ASNStatuses:  asnStatuses,
+		DNSStatuses:  dnsStatuses,
+		TrafficData:  trafficModelData,
+		ASTrafficData: asnTrafficList,
 	}
 }
 

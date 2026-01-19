@@ -8,8 +8,12 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/netblocks/netblocks/internal/config"
+	"github.com/netblocks/netblocks/internal/models"
 )
 
 // TrafficMonitor monitors Iran's internet traffic using Cloudflare Radar API
@@ -617,6 +621,185 @@ func (tm *TrafficMonitor) Start(ctx context.Context) {
 			log.Println("📡 Periodic Cloudflare Radar data fetch...")
 			_, _ = tm.FetchFromCloudflare(ctx)
 		}
+	}
+}
+
+// FetchASNTrafficFromCloudflare fetches ASN-level traffic data from Cloudflare Radar API
+// Returns top 20 Iranian ASNs by traffic volume
+func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, iranASNs []string) ([]*models.ASTrafficData, error) {
+	// Cloudflare Radar API endpoint for ASN-level traffic summary
+	// Using netflows/summary/asn endpoint to get traffic distribution by ASN
+	// location: IR for Iran
+	// dateRange: 1d for last 24 hours
+	url := "https://api.cloudflare.com/client/v4/radar/netflows/summary/asn?location=IR&dateRange=1d&format=json"
+
+	log.Printf("Fetching Cloudflare Radar ASN traffic data from: %s", url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		log.Printf("Error creating HTTP request for ASN traffic: %v", err)
+		return nil, fmt.Errorf("error creating HTTP request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "NetBlocks-Monitor/1.0")
+	
+	// Add Cloudflare authentication headers
+	if tm.cloudflareToken != "" {
+		req.Header.Set("Authorization", "Bearer "+tm.cloudflareToken)
+	} else if tm.cloudflareEmail != "" && tm.cloudflareKey != "" {
+		req.Header.Set("X-Auth-Email", tm.cloudflareEmail)
+		req.Header.Set("X-Auth-Key", tm.cloudflareKey)
+	} else {
+		return nil, fmt.Errorf("no Cloudflare credentials available")
+	}
+
+	resp, err := tm.client.Do(req)
+	if err != nil {
+		log.Printf("Error making HTTP request to Cloudflare ASN endpoint: %v", err)
+		return nil, fmt.Errorf("error making HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error reading ASN traffic response body: %v", err)
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Cloudflare ASN API returned non-200 status: %d %s", resp.StatusCode, resp.Status)
+		var errorResp struct {
+			Success bool `json:"success"`
+			Errors  []struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		if jsonErr := json.Unmarshal(bodyBytes, &errorResp); jsonErr == nil && len(errorResp.Errors) > 0 {
+			for _, err := range errorResp.Errors {
+				log.Printf("Cloudflare ASN API error %d: %s", err.Code, err.Message)
+			}
+		}
+		return nil, fmt.Errorf("Cloudflare API returned status %d %s", resp.StatusCode, resp.Status)
+	}
+
+	var apiResp CloudflareRadarResponse
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		log.Printf("Error decoding ASN traffic JSON response: %v", err)
+		return nil, fmt.Errorf("error decoding JSON response: %w", err)
+	}
+
+	if !apiResp.Success {
+		log.Printf("Cloudflare ASN API returned success=false")
+		return nil, fmt.Errorf("Cloudflare API returned success=false")
+	}
+
+	// Parse the result to extract ASN traffic data
+	var result struct {
+		Meta struct {
+			DateRange []struct {
+				StartTime string `json:"startTime"`
+				EndTime   string `json:"endTime"`
+			} `json:"dateRange"`
+		} `json:"meta"`
+		Summary []struct {
+			ASN    int     `json:"asn"`
+			Value  float64 `json:"value"`
+			Change float64 `json:"change,omitempty"`
+		} `json:"summary"`
+	}
+
+	if err := json.Unmarshal(apiResp.Result, &result); err != nil {
+		log.Printf("Error parsing ASN traffic result: %v", err)
+		return nil, fmt.Errorf("error parsing result: %w", err)
+	}
+
+	if len(result.Summary) == 0 {
+		log.Printf("Cloudflare ASN API returned empty summary data")
+		return nil, fmt.Errorf("no ASN traffic data available")
+	}
+
+	// Calculate total traffic for percentage calculation
+	var totalTraffic float64
+	for _, item := range result.Summary {
+		totalTraffic += item.Value
+	}
+
+	// Create a map of Iranian ASNs for quick lookup
+	iranASNMap := make(map[string]bool)
+	for _, asn := range iranASNs {
+		// Remove "AS" prefix if present for comparison
+		asnNum := strings.TrimPrefix(asn, "AS")
+		iranASNMap[asnNum] = true
+	}
+
+	// Filter and process ASN traffic data
+	asnTrafficList := make([]*models.ASTrafficData, 0)
+	for _, item := range result.Summary {
+		asnStr := fmt.Sprintf("AS%d", item.ASN)
+		asnNumStr := fmt.Sprintf("%d", item.ASN)
+		
+		// Check if this ASN is in our Iranian ASN list
+		if !iranASNMap[asnNumStr] {
+			continue
+		}
+
+		percentage := 0.0
+		if totalTraffic > 0 {
+			percentage = (item.Value / totalTraffic) * 100.0
+		}
+
+		// Get ASN name from config
+		asnName := config.GetASNName(asnStr)
+		if asnName == "Unknown" {
+			asnName = asnStr
+		}
+
+		// Determine status based on percentage
+		status, emoji := tm.determineASNStatus(percentage)
+
+		asnTrafficList = append(asnTrafficList, &models.ASTrafficData{
+			ASN:          asnStr,
+			Name:         asnName,
+			TrafficVolume: item.Value,
+			Percentage:    percentage,
+			Status:       status,
+			StatusEmoji:  emoji,
+			LastUpdate:   time.Now(),
+		})
+	}
+
+	// Sort by traffic volume (highest first) and take top 20
+	if len(asnTrafficList) > 1 {
+		for i := 0; i < len(asnTrafficList)-1; i++ {
+			for j := i + 1; j < len(asnTrafficList); j++ {
+				if asnTrafficList[i].TrafficVolume < asnTrafficList[j].TrafficVolume {
+					asnTrafficList[i], asnTrafficList[j] = asnTrafficList[j], asnTrafficList[i]
+				}
+			}
+		}
+	}
+
+	// Limit to top 20
+	if len(asnTrafficList) > 20 {
+		asnTrafficList = asnTrafficList[:20]
+	}
+
+	log.Printf("Successfully fetched ASN traffic data for %d Iranian ASNs", len(asnTrafficList))
+	return asnTrafficList, nil
+}
+
+// determineASNStatus determines the ASN traffic status based on percentage
+func (tm *TrafficMonitor) determineASNStatus(percentage float64) (string, string) {
+	switch {
+	case percentage >= 5.0:
+		return "High", "🟢"
+	case percentage >= 1.0:
+		return "Medium", "🟡"
+	case percentage >= 0.1:
+		return "Low", "🟠"
+	default:
+		return "Very Low", "⚪"
 	}
 }
 

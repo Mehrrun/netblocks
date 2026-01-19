@@ -39,6 +39,19 @@ type MonitoringResult struct {
 	ASNStatuses  map[string]*ASNStatus  `json:"asn_statuses"`
 	DNSStatuses  map[string]*DNSStatus  `json:"dns_statuses"`
 	TrafficData  *TrafficData           `json:"traffic_data,omitempty"`
+	ASTrafficData []*ASTrafficData      `json:"as_traffic_data,omitempty"`
+}
+
+// ASTrafficData represents traffic statistics for a specific ASN
+type ASTrafficData struct {
+	ASN            string        `json:"asn"`
+	Name           string        `json:"name"`
+	TrafficVolume  float64       `json:"traffic_volume"`  // Bytes or requests
+	Percentage     float64       `json:"percentage"`      // Percentage of total Iranian traffic
+	Status         string        `json:"status"`          // Status indicator
+	StatusEmoji    string        `json:"status_emoji"`
+	ChartBuffer    *bytes.Buffer `json:"-"`               // PNG chart, not serialized to JSON
+	LastUpdate     time.Time     `json:"last_update"`
 }
 
 // TrafficData represents Iran's internet traffic statistics

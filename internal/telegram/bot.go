@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -670,16 +671,30 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 		b.sendMessage(chatID, dnsText)
 	}
 
-	// Send traffic chart LAST (diagram after other data)
+	// Send traffic chart (diagram after other data)
 	if result.TrafficData != nil {
 		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
-			log.Printf("📈 Sending traffic chart LAST (after ASN/DNS data)")
+			log.Printf("📈 Sending Iran traffic chart (after ASN/DNS data)")
 			b.sendTrafficChart(chatID, result.TrafficData)
 		} else {
 			log.Printf("⚠️  Traffic chart buffer is empty - skipping chart")
 		}
 	} else {
 		log.Printf("⚠️  Traffic data is nil - no chart available")
+	}
+
+	// Send ASN traffic chart after Iran traffic chart
+	if result.ASTrafficData != nil && len(result.ASTrafficData) > 0 {
+		// Get chart buffer from first item (all items share the same chart)
+		firstItem := result.ASTrafficData[0]
+		if firstItem.ChartBuffer != nil && firstItem.ChartBuffer.Len() > 0 {
+			log.Printf("📊 Sending ASN traffic chart (after Iran traffic chart)")
+			b.sendASNTrafficChart(chatID, result.ASTrafficData, firstItem.ChartBuffer)
+		} else {
+			log.Printf("⚠️  ASN traffic chart buffer is empty - skipping chart")
+		}
+	} else {
+		log.Printf("⚠️  ASN traffic data is nil or empty - no ASN chart available")
 	}
 }
 
@@ -809,6 +824,53 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	}
 	
 	photo.Caption = caption
+	photo.ParseMode = tgbotapi.ModeMarkdown
+	
+	_, _ = b.api.Send(photo)
+}
+
+// sendASNTrafficChart sends the ASN traffic chart as a photo with caption
+func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficData, chartBuffer *bytes.Buffer) {
+	if len(data) == 0 || chartBuffer == nil || chartBuffer.Len() == 0 {
+		return
+	}
+	
+	// Create caption with summary
+	var caption strings.Builder
+	caption.WriteString(fmt.Sprintf("📊 *Top %d Iranian ASNs by Traffic*\n\n", len(data)))
+	
+	// Show top 5 ASNs in caption
+	maxShow := 5
+	if len(data) < maxShow {
+		maxShow = len(data)
+	}
+	
+	for i := 0; i < maxShow; i++ {
+		item := data[i]
+		caption.WriteString(fmt.Sprintf("%s *%s*\n   └─ %.2f%% of total traffic\n",
+			item.StatusEmoji, item.Name, item.Percentage))
+	}
+	
+	if len(data) > maxShow {
+		caption.WriteString(fmt.Sprintf("\n... and %d more ASNs (see chart)", len(data)-maxShow))
+	}
+	
+	fileBytes := tgbotapi.FileBytes{
+		Name:  "asn_traffic_top20.png",
+		Bytes: chartBuffer.Bytes(),
+	}
+	
+	var photo tgbotapi.PhotoConfig
+	switch id := chatID.(type) {
+	case int64:
+		photo = tgbotapi.NewPhoto(id, fileBytes)
+	case string:
+		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
+	default:
+		return
+	}
+	
+	photo.Caption = caption.String()
 	photo.ParseMode = tgbotapi.ModeMarkdown
 	
 	_, _ = b.api.Send(photo)
