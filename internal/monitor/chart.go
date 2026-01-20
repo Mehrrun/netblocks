@@ -192,7 +192,7 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 		
 		barValues[i] = chart.Value{
 			Label: label,
-			Value: bandwidth,
+			Value: percentage, // This is a percentage value from the API
 			Style: chart.Style{
 				FillColor:   barColor,
 				StrokeColor: barColor,
@@ -205,7 +205,7 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 	graph := chart.BarChart{
 		Width:  1200, // Wider to accommodate ASN names
 		Height: 600,  // Taller for better readability
-		Title:  fmt.Sprintf("Top %d Iranian ASNs by Current Bandwidth", len(data)),
+		Title:  fmt.Sprintf("Top %d Iranian ASNs by Traffic Share", len(data)),
 		TitleStyle: chart.Style{
 			FontSize: 18,
 		},
@@ -223,21 +223,17 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 			FontSize: 10,
 		},
 		YAxis: chart.YAxis{
-			Name:      "Bandwidth (Requests/Bytes)",
+			Name:      "Traffic Share (%)",
 			NameStyle: chart.Style{FontSize: 14},
 			Range: &chart.ContinuousRange{
 				Min: 0,
-				Max: maxBandwidth * 1.1, // Add 10% padding
+				Max: maxPercentage * 1.1, // Add 10% padding (values are already percentages)
 			},
 			ValueFormatter: func(v interface{}) string {
 				if vf, ok := v.(float64); ok {
-					// Format large numbers with K/M suffixes
-					if vf >= 1000000 {
-						return fmt.Sprintf("%.1fM", vf/1000000)
-					} else if vf >= 1000 {
-						return fmt.Sprintf("%.1fK", vf/1000)
-					}
-					return fmt.Sprintf("%.0f", vf)
+					// Values are already percentages from Cloudflare API
+					// Format as percentage with 1 decimal place
+					return fmt.Sprintf("%.1f%%", vf)
 				}
 				return ""
 			},
