@@ -853,10 +853,6 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 			item.StatusEmoji, item.Name, item.Percentage))
 	}
 	
-	if len(data) > maxShow {
-		caption.WriteString(fmt.Sprintf("\n... and %d more ASNs (see chart)", len(data)-maxShow))
-	}
-	
 	// Use same pattern as sendTrafficChart
 	fileBytes := tgbotapi.FileBytes{
 		Name:  "asn_traffic_top10.png",
