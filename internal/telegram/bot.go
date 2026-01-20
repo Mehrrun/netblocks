@@ -859,7 +859,7 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 	
 	// Use same pattern as sendTrafficChart
 	fileBytes := tgbotapi.FileBytes{
-		Name:  "asn_traffic_top20.png",
+		Name:  "asn_traffic_top10.png",
 		Bytes: chartBuffer.Bytes(),
 	}
 	
