@@ -58,3 +58,7 @@ Thumbs.db
 bot.log
 bot.pid
 
+# Chart images (generated locally for testing)
+*.png
+!config.example.json
+
