@@ -50,10 +50,10 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 	log.Printf("✅ Successfully authorized as bot: @%s (ID: %d, Name: %s)", 
 		botInfo.UserName, botInfo.ID, botInfo.FirstName)
 
-	// Default to 10 minutes if not set
+	// Default to 20 minutes if not set
 	updateInterval := cfg.Interval
 	if updateInterval == 0 {
-		updateInterval = 10 * time.Minute
+		updateInterval = 20 * time.Minute
 	}
 
 	// Normalize channel ID/username format
@@ -92,7 +92,7 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 		return
 	}
 	
-	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Bot is now monitoring Iranian networks\n📊 Monitoring %d ASNs and %d+ DNS servers\n⏰ Updates will be sent every 10 minutes\n\nBot started at: `%s`",
+	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Bot is now monitoring Iranian networks\n📊 Monitoring %d ASNs and %d+ DNS servers\n⏰ Updates will be sent every 20 minutes\n\nBot started at: `%s`",
 		len(b.config.IranASNs),
 		len(b.config.DNSServers),
 		time.Now().Format("2006-01-02 15:04:05"))
@@ -234,7 +234,7 @@ func (b *Bot) sendHelp(chatID int64) {
 /help - Show this help message
 
 Example:
-/interval 10 - Set interval to 10 minutes`
+/interval 20 - Set interval to 20 minutes (default)`
 	
 	b.sendMessage(chatID, text)
 }
@@ -268,7 +268,7 @@ func (b *Bot) getUpdateInterval() time.Duration {
 	defer b.intervalMu.RUnlock()
 	interval := b.updateInterval
 	if interval == 0 {
-		interval = 10 * time.Minute
+		interval = 20 * time.Minute
 	}
 	return interval
 }
@@ -699,8 +699,8 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 }
 
 // SendPeriodicUpdates sends periodic status updates to all subscribed users
-// Uses the interval set via /interval command (default: 10 minutes)
-// Channel updates are sent every 10 minutes independently
+// Uses the interval set via /interval command (default: 20 minutes)
+// Channel updates are sent every 20 minutes independently
 // The interval can be changed dynamically and will take effect within 1 second
 func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	// Wait a few seconds for monitoring to initialize and collect initial data
@@ -713,7 +713,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	lastUpdateTime := time.Now()
 	lastChannelUpdateTime := time.Time{} // Start with zero time so channel gets immediate update
 	lastInterval := b.getUpdateInterval()
-	channelInterval := 10 * time.Minute // Channel updates every 10 minutes
+	channelInterval := 19 * time.Minute // Channel updates every 20 minutes
 	
 	log.Printf("Periodic updates started - will send to subscribed users every %v", lastInterval)
 	if b.channelID != "" {
@@ -745,7 +745,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 				}
 			}
 			
-			// Check if it's time to send channel update (every 10 minutes)
+			// Check if it's time to send channel update (every 20 minutes)
 			shouldSendChannelUpdate := false
 			if b.channelID != "" {
 				// If lastChannelUpdateTime is zero (startup), send immediately
@@ -777,7 +777,7 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 						continue
 					}
 					
-					// Send to channel if it's time (every 10 minutes)
+					// Send to channel if it's time (every 20 minutes)
 					if shouldSendChannelUpdate {
 						log.Printf("📢 Sending periodic update to channel: %s (interval: %v)", b.channelID, channelInterval)
 						b.sendStatusMessages(b.channelID, result)
