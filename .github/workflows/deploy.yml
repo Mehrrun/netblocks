@@ -11,9 +11,12 @@ on:
       - 'go.sum'
       - '.trigger'
   workflow_dispatch:
-  schedule:
-    # Run every 5 hours to ensure continuous operation (GitHub Actions has 6-hour limit)
-    - cron: '0 */5 * * *'
+
+# Concurrency control: Only one instance should run at a time
+# If a new workflow is triggered while one is running, it will wait for the current one to finish
+concurrency:
+  group: netblocks-bot-24-7
+  cancel-in-progress: false  # Don't cancel existing runs, queue new ones instead
 
 permissions:
   contents: write  # Write permission needed to commit .trigger file for auto-restart
