@@ -418,14 +418,15 @@ jobs:
         echo "=========================================="
         echo ""
         
-        # Calculate restart time (5.5 hours = 330 minutes = 19800 seconds)
-        # GitHub Actions free tier has 6-hour limit, restart at 5.5 hours to be safe
-        RESTART_SECONDS=19800  # 5.5 hours
+        # Calculate restart time (5 hours 15 minutes = 315 minutes = 18900 seconds)
+        # Restart earlier to give new workflow time to start before old one stops
+        # GitHub Actions free tier has 6-hour limit, restart at 5h 15m to be safe
+        RESTART_SECONDS=18900  # 5 hours 15 minutes (315 minutes)
         START_TIME=$(date +%s)
         RESTART_TIME=$((START_TIME + RESTART_SECONDS))
         
         echo "⏰ Bot will auto-restart at $(date -d @$RESTART_TIME '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "   (This is 5.5 hours from now to avoid GitHub Actions 6-hour limit)"
+        echo "   (This is 5 hours 15 minutes from now to avoid GitHub Actions 6-hour limit)"
         echo ""
         
         # Infinite loop - keeps workflow alive until restart time
@@ -439,7 +440,7 @@ jobs:
             echo "=========================================="
             echo "🔄 Auto-restarting workflow to avoid 6-hour limit"
             echo "   Current time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "   Bot has been running for ~5.5 hours"
+            echo "   Bot has been running for ~5 hours 15 minutes"
             echo "=========================================="
             echo ""
             
@@ -472,6 +473,8 @@ jobs:
             sleep 5
             
             echo "✅ Trigger file pushed. New workflow will start shortly."
+            echo "   Waiting 30 seconds for new workflow to initialize..."
+            sleep 30
             echo "   This workflow will exit, and the new one will take over."
             exit 0
           fi
