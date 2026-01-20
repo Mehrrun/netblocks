@@ -163,14 +163,17 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 		data = data[:maxItems]
 	}
 
-	// Prepare data for bar chart - use bandwidth (TrafficVolume) instead of percentage
+	// Prepare data for bar chart - use TrafficVolume (which is percentage from API)
+	// Note: TrafficVolume from Cloudflare API is actually a percentage (0-100)
+	// For netflows endpoint: percentage of total bytes
+	// For HTTP endpoint: percentage of total requests
 	barValues := make([]chart.Value, len(data))
-	maxBandwidth := 0.0
+	maxPercentage := 0.0
 	for i, item := range data {
-		// Use TrafficVolume as the bandwidth value
-		bandwidth := item.TrafficVolume
-		if bandwidth > maxBandwidth {
-			maxBandwidth = bandwidth
+		// Use TrafficVolume which contains the percentage value from API
+		percentage := item.TrafficVolume
+		if percentage > maxPercentage {
+			maxPercentage = percentage
 		}
 		
 		// Create label: "AS12345 - Name" to show both ASN and name
