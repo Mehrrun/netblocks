@@ -205,8 +205,9 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 	}
 
 	// Create bar chart
+	// Adjust width to accommodate more bars (10 ASNs)
 	graph := chart.BarChart{
-		Width:  1200, // Wider to accommodate ASN names
+		Width:  1400, // Wider to accommodate 10 ASN names
 		Height: 600,  // Taller for better readability
 		Title:  fmt.Sprintf("Top %d Iranian ASNs by Traffic Share", len(data)),
 		TitleStyle: chart.Style{

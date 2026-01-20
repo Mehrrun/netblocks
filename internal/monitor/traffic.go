@@ -631,11 +631,12 @@ func (tm *TrafficMonitor) Start(ctx context.Context) {
 func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, iranASNs []string) ([]*models.ASTrafficData, error) {
 	// Try multiple endpoint variations (similar to Iran traffic retry logic)
 	// Based on Cloudflare Radar API docs: /radar/netflows/top/ases for top ASNs
+	// Request top 10 ASNs using limit parameter
 	endpointVariations := []string{
-		// Try 1: Netflows top ASes (documented endpoint)
-		"https://api.cloudflare.com/client/v4/radar/netflows/top/ases?location=IR&dateRange=1d&format=json",
-		// Try 2: HTTP top ASes
-		"https://api.cloudflare.com/client/v4/radar/http/top/ases?location=IR&dateRange=1d&format=json",
+		// Try 1: Netflows top ASes (documented endpoint) - request top 10
+		"https://api.cloudflare.com/client/v4/radar/netflows/top/ases?location=IR&dateRange=1d&limit=10&format=json",
+		// Try 2: HTTP top ASes - request top 10
+		"https://api.cloudflare.com/client/v4/radar/http/top/ases?location=IR&dateRange=1d&limit=10&format=json",
 		// Try 3: Query parameter with dimension
 		"https://api.cloudflare.com/client/v4/radar/http/top?dimension=asn&location=IR&dateRange=1d&format=json",
 		// Try 4: Summary endpoint with dimension
