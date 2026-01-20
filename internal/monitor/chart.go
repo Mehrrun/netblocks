@@ -222,7 +222,7 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 			},
 			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255}, // White background
 		},
-		BarWidth: 40, // Width of each bar
+		BarWidth: 35, // Width of each bar (slightly narrower to fit 10 bars better)
 		XAxis: chart.Style{
 			FontSize: 10,
 		},
