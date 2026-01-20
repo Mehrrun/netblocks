@@ -150,121 +150,106 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
 }
 
-// GenerateASNTrafficChart generates a line chart style visualization for ASN traffic data
-// Follows the exact same pattern as GenerateTrafficChart for consistency
+// GenerateASNTrafficChart generates a bar chart visualization for ASN traffic data
+// Shows top 10 Iranian ASNs with their names and current bandwidth (independent bars)
 func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("no ASN traffic data available")
 	}
 
-	// Limit to top 20 ASNs (already sorted by traffic volume)
-	maxItems := 20
+	// Limit to top 10 ASNs (already sorted by traffic volume)
+	maxItems := 10
 	if len(data) > maxItems {
 		data = data[:maxItems]
 	}
 
-	// Prepare X values (ASN index) - similar to working chart pattern
-	xValues := make([]float64, len(data))
-	for i := range xValues {
-		xValues[i] = float64(i) // ASN index: 0, 1, 2, ...
-	}
-
-	// Prepare Y values (traffic percentage) - similar to working chart pattern
-	yValues := make([]float64, len(data))
-	maxPercentage := 0.0
+	// Prepare data for bar chart - use bandwidth (TrafficVolume) instead of percentage
+	barValues := make([]chart.Value, len(data))
+	maxBandwidth := 0.0
 	for i, item := range data {
-		yValues[i] = item.Percentage
-		if item.Percentage > maxPercentage {
-			maxPercentage = item.Percentage
+		// Use TrafficVolume as the bandwidth value
+		bandwidth := item.TrafficVolume
+		if bandwidth > maxBandwidth {
+			maxBandwidth = bandwidth
+		}
+		
+		// Create label: "AS12345 - Name" to show both ASN and name
+		label := fmt.Sprintf("%s - %s", item.ASN, item.Name)
+		if len(label) > 40 {
+			// Truncate long names but keep ASN visible
+			maxNameLen := 40 - len(item.ASN) - 3 // Reserve space for ASN, " - ", and "..."
+			if maxNameLen > 0 {
+				label = fmt.Sprintf("%s - %s...", item.ASN, item.Name[:maxNameLen])
+			} else {
+				// If ASN itself is too long, just use ASN
+				label = item.ASN
+			}
+		}
+		
+		// Use light blue color for all bars (white-ish but a bit blue)
+		// Light blue: RGB(173, 216, 230) or similar - slightly lighter
+		barColor := drawing.Color{R: 176, G: 224, B: 230, A: 255} // Light blue (PowderBlue)
+		
+		barValues[i] = chart.Value{
+			Label: label,
+			Value: bandwidth,
+			Style: chart.Style{
+				FillColor:   barColor,
+				StrokeColor: barColor,
+				StrokeWidth: 1,
+			},
 		}
 	}
 
-	// Determine line color based on average status or use a default
-	// Use blue as default (matching working chart pattern)
-	var lineColor drawing.Color = chart.ColorBlue
-	if len(data) > 0 {
-		// Use color of top ASN as line color
-		switch data[0].Status {
-		case "High":
-			lineColor = drawing.Color{R: 76, G: 175, B: 80, A: 255} // Green
-		case "Medium":
-			lineColor = drawing.Color{R: 255, G: 193, B: 7, A: 255} // Yellow
-		case "Low":
-			lineColor = drawing.Color{R: 255, G: 152, B: 0, A: 255} // Orange
-		default:
-			lineColor = chart.ColorBlue
-		}
-	}
-
-	// Create the chart - following exact same pattern as GenerateTrafficChart
-	graph := chart.Chart{
-		Width:  800,  // Same width as working chart
-		Height: 400,  // Same height as working chart
+	// Create bar chart
+	graph := chart.BarChart{
+		Width:  1200, // Wider to accommodate ASN names
+		Height: 600,  // Taller for better readability
+		Title:  fmt.Sprintf("Top %d Iranian ASNs by Current Bandwidth", len(data)),
+		TitleStyle: chart.Style{
+			FontSize: 18,
+		},
 		Background: chart.Style{
 			Padding: chart.Box{
-				Top:    50,
-				Left:   20,
+				Top:    60,
+				Left:   100, // More left padding for ASN names
 				Right:  20,
-				Bottom: 20,
+				Bottom: 40,
 			},
 			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255}, // White background
 		},
-		XAxis: chart.XAxis{
-			Name:      "ASN (Top 20)",
-			NameStyle: chart.Style{},
-			Style:     chart.Style{},
-			ValueFormatter: func(v interface{}) string {
-				if vf, ok := v.(float64); ok {
-					idx := int(vf)
-					if idx >= 0 && idx < len(data) {
-						// Show ASN number instead of index
-						return fmt.Sprintf("%d", idx+1)
-					}
-				}
-				return ""
-			},
+		BarWidth: 40, // Width of each bar
+		XAxis: chart.Style{
+			FontSize: 10,
 		},
 		YAxis: chart.YAxis{
-			Name:      "Traffic Volume (%)",
-			NameStyle: chart.Style{},
-			Style:     chart.Style{},
+			Name:      "Bandwidth (Requests/Bytes)",
+			NameStyle: chart.Style{FontSize: 14},
 			Range: &chart.ContinuousRange{
 				Min: 0,
-				Max: maxPercentage * 1.1, // Add 10% padding
+				Max: maxBandwidth * 1.1, // Add 10% padding
 			},
 			ValueFormatter: func(v interface{}) string {
 				if vf, ok := v.(float64); ok {
-					return fmt.Sprintf("%.1f%%", vf)
+					// Format large numbers with K/M suffixes
+					if vf >= 1000000 {
+						return fmt.Sprintf("%.1fM", vf/1000000)
+					} else if vf >= 1000 {
+						return fmt.Sprintf("%.1fK", vf/1000)
+					}
+					return fmt.Sprintf("%.0f", vf)
 				}
 				return ""
 			},
 		},
-		Series: []chart.Series{
-			chart.ContinuousSeries{
-				Name:    "ASN Traffic",
-				XValues: xValues,
-				YValues: yValues,
-				Style: chart.Style{
-					StrokeColor: lineColor,
-					StrokeWidth: 3,
-					DotWidth:    5, // Add visible dots at each ASN point
-					DotColor:    lineColor,
-				},
-			},
-		},
+		Bars: barValues,
 	}
 
-	// Add title - similar to working chart
-	graph.Title = fmt.Sprintf("Top %d Iranian ASNs by Traffic (Current)", len(data))
-	graph.TitleStyle = chart.Style{
-		FontSize: 16,
-	}
-
-	// Render to buffer - same pattern as working chart
+	// Render to buffer
 	buffer := bytes.NewBuffer([]byte{})
 	err := graph.Render(chart.PNG, buffer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render ASN traffic chart: %w", err)
+		return nil, fmt.Errorf("failed to render ASN traffic bar chart: %w", err)
 	}
 
 	return buffer, nil
