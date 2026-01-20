@@ -16,7 +16,7 @@ on:
     - cron: '0 */5 * * *'
 
 permissions:
-  contents: read
+  contents: write  # Write permission needed to commit .trigger file for auto-restart
 
 jobs:
   run-bot:
