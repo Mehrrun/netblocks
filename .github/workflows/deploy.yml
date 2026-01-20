@@ -29,6 +29,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        persist-credentials: true
       
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -443,10 +446,27 @@ jobs:
             # Trigger workflow restart by updating a trigger file
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+            
+            # Ensure we have the latest remote state
+            git fetch origin main 2>/dev/null || true
+            git pull origin main --rebase 2>/dev/null || true
+            
             echo "$(date +%s)" > .trigger
             git add .trigger
-            git commit -m "Auto-restart: Workflow restart before 6-hour limit" || true
-            git push || true
+            
+            # Commit and push with error handling
+            if git commit -m "Auto-restart: Workflow restart before 6-hour limit"; then
+              echo "✅ Trigger file committed successfully"
+              if git push origin main; then
+                echo "✅ Trigger file pushed successfully"
+              else
+                echo "❌ Failed to push trigger file. Retrying..."
+                sleep 2
+                git push origin main || echo "❌ Push failed on retry"
+              fi
+            else
+              echo "❌ Failed to commit trigger file (may already be committed)"
+            fi
             
             # Give a moment for the push to complete
             sleep 5
