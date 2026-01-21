@@ -628,7 +628,7 @@ func (tm *TrafficMonitor) Start(ctx context.Context) {
 // Returns top 10 Iranian ASNs by traffic volume
 // Follows the same pattern as FetchFromCloudflare for consistency
 // Tries multiple endpoint variations to find the correct one
-func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, iranASNs []string) ([]*models.ASTrafficData, error) {
+func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context) ([]*models.ASTrafficData, error) {
 	// Try multiple endpoint variations (similar to Iran traffic retry logic)
 	// Based on Cloudflare Radar API docs: /radar/netflows/top/ases for top ASNs
 	// Request top 10 ASNs using limit parameter
@@ -654,7 +654,7 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 	// Try each endpoint variation
 	for i, url := range endpointVariations {
 		log.Printf("Trying ASN endpoint variation %d/%d: %s", i+1, len(endpointVariations), url)
-		result, err := tm.fetchASNTrafficWithURL(ctx, url, iranASNs)
+		result, err := tm.fetchASNTrafficWithURL(ctx, url)
 		if err == nil && len(result) > 0 {
 			log.Printf("✅ Successfully fetched ASN traffic data using endpoint variation %d", i+1)
 			return result, nil
@@ -671,7 +671,7 @@ func (tm *TrafficMonitor) FetchASNTrafficFromCloudflare(ctx context.Context, ira
 
 // fetchASNTrafficWithURL fetches ASN traffic data using a specific URL
 // Helper function similar to fetchWithURL for Iran traffic
-func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string, iranASNs []string) ([]*models.ASTrafficData, error) {
+func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string) ([]*models.ASTrafficData, error) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -873,20 +873,11 @@ func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string
 	}
 
 	log.Printf("Total ASN traffic from API: %f, Found %d ASNs in response", totalTraffic, len(summaryData))
-
-	// Create a map of Iranian ASNs for quick lookup
-	iranASNMap := make(map[string]bool)
-	for _, asn := range iranASNs {
-		// Remove "AS" prefix if present for comparison
-		asnNum := strings.TrimPrefix(asn, "AS")
-		iranASNMap[asnNum] = true
-	}
-	log.Printf("Looking for %d configured Iranian ASNs in API response", len(iranASNMap))
 	
 	// Log first few ASNs from API for debugging
-	log.Printf("First 5 ASNs from API response:")
+	log.Printf("First 10 ASNs from Cloudflare Radar API response:")
 	for i, item := range summaryData {
-		if i >= 5 {
+		if i >= 10 {
 			break
 		}
 		asnValue := item.ASN
@@ -905,7 +896,7 @@ func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string
 		log.Printf("  ASN %v (Name: %s), Value: %s", asnValue, item.ClientASName, valueStr)
 	}
 
-	// Filter and process ASN traffic data
+	// Process ALL ASN traffic data from Cloudflare (no filtering)
 	asnTrafficList := make([]*models.ASTrafficData, 0)
 	for _, item := range summaryData {
 		// Handle ASN - can be in ASN or ClientASN field
@@ -942,11 +933,6 @@ func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string
 			}
 		default:
 			log.Printf("Unexpected ASN type: %T, value: %v", asnValue, asnValue)
-			continue
-		}
-		
-		// Check if this ASN is in our Iranian ASN list
-		if !iranASNMap[asnNumStr] {
 			continue
 		}
 
@@ -1014,8 +1000,7 @@ func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string
 	}
 
 	if len(asnTrafficList) == 0 {
-		log.Printf("⚠️  No Iranian ASNs matched in API response - will skip ASN chart")
-		log.Printf("Configured ASN count: %d, API response ASN count: %d", len(iranASNMap), len(summaryData))
+		log.Printf("⚠️  No ASN traffic data available after processing - will skip ASN chart")
 		return []*models.ASTrafficData{}, nil
 	}
 
@@ -1024,7 +1009,7 @@ func (tm *TrafficMonitor) fetchASNTrafficWithURL(ctx context.Context, url string
 	for i := 0; i < min(3, len(asnTrafficList)); i++ {
 		topNames = append(topNames, asnTrafficList[i].Name)
 	}
-	log.Printf("ASN traffic data processed successfully - %d Iranian ASNs found (top ASNs: %v)", 
+	log.Printf("ASN traffic data processed successfully - %d ASNs from Cloudflare Radar (top ASNs: %v)", 
 		len(asnTrafficList), topNames)
 	return asnTrafficList, nil
 }

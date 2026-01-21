@@ -140,9 +140,9 @@ func (m *Monitor) updateResults(ctx context.Context) {
 		}
 	}
 
-	// Fetch ASN-level traffic data
+	// Fetch ASN-level traffic data (all ASNs from Cloudflare, not filtered by config)
 	var asnTrafficList []*models.ASTrafficData
-	asnTrafficRaw, err := m.trafficMonitor.FetchASNTrafficFromCloudflare(ctx, m.config.IranASNs)
+	asnTrafficRaw, err := m.trafficMonitor.FetchASNTrafficFromCloudflare(ctx)
 	if err != nil {
 		log.Printf("⚠️  Failed to fetch ASN traffic data: %v", err)
 		// Don't set asnTrafficList - will be nil/empty, chart will be skipped

@@ -10,11 +10,9 @@ on:
       - 'go.mod'
       - 'go.sum'
   workflow_dispatch:
-  schedule:
-    # Run every 5 hours 30 minutes (at :00 and :30 of every 5th hour)
-    # This ensures a new instance starts before the 6-hour GitHub Actions limit
-    - cron: '0 */5 * * *'   # Every 5 hours at :00 (00:00, 05:00, 10:00, 15:00, 20:00)
-    - cron: '30 */5 * * *'  # Every 5 hours at :30 (00:30, 05:30, 10:30, 15:30, 20:30)
+  # Removed cron schedule - using API trigger at 5h 30m instead
+  # Cron caused multiple workflow instances running simultaneously
+  # API trigger is more reliable and prevents overlaps
 
 # Concurrency control: Remove group restriction to allow parallel runs
 # Multiple bot instances can run simultaneously when auto-restart triggers new run
@@ -448,7 +446,8 @@ jobs:
           MINUTES_UNTIL_RESTART=$(( (TIME_UNTIL_RESTART % 3600) / 60 ))
           
           # Check if it's time to restart (within 60 seconds of restart time)
-          if [ $TIME_UNTIL_RESTART -le 60 ]; then
+          # Only trigger once per workflow run
+          if [ $TIME_UNTIL_RESTART -le 60 ] && [ -z "$RESTART_TRIGGERED" ]; then
             echo ""
             echo "=========================================="
             echo "🔄 Auto-restarting workflow to avoid 6-hour limit"
@@ -456,6 +455,9 @@ jobs:
             echo "   Bot has been running for ~5 hours 30 minutes"
             echo "=========================================="
             echo ""
+            
+            # Mark that we've triggered to prevent multiple triggers
+            RESTART_TRIGGERED="true"
             
             # Trigger workflow restart via GitHub API (workflow_dispatch)
             echo "📡 Triggering new workflow run via GitHub API..."
