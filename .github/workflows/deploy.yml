@@ -9,17 +9,22 @@ on:
       - 'internal/**'
       - 'go.mod'
       - 'go.sum'
-      - '.trigger'
   workflow_dispatch:
+  schedule:
+    # Run every 5 hours 30 minutes (at :00 and :30 of every 5th hour)
+    # This ensures a new instance starts before the 6-hour GitHub Actions limit
+    - cron: '0 */5 * * *'   # Every 5 hours at :00 (00:00, 05:00, 10:00, 15:00, 20:00)
+    - cron: '30 */5 * * *'  # Every 5 hours at :30 (00:30, 05:30, 10:30, 15:30, 20:30)
 
-# Concurrency control: Only one instance should run at a time
-# If a new workflow is triggered while one is running, it will wait for the current one to finish
+# Concurrency control: Allow multiple instances to run simultaneously
+# This allows overlapping runs when cron triggers a new instance every 5.5 hours
+# Having two bots running at the same time is acceptable per user requirements
 concurrency:
   group: netblocks-bot-24-7
-  cancel-in-progress: false  # Don't cancel existing runs, queue new ones instead
+  cancel-in-progress: false  # Don't cancel existing runs, allow parallel execution
 
 permissions:
-  contents: write  # Write permission needed to commit .trigger file for auto-restart
+  contents: read  # Read-only permissions (no longer need to commit .trigger file)
 
 jobs:
   run-bot:
@@ -411,73 +416,27 @@ jobs:
         
         echo "=========================================="
         echo ""
-        echo "This workflow will stay 'Running' (yellow status) forever."
+        echo "This workflow will run until GitHub Actions 6-hour limit."
+        echo "Cron will automatically start a new instance every 5.5 hours."
         echo "To stop the bot: Cancel this workflow in GitHub Actions UI"
-        echo "To restart: Cancel workflow, then push a new commit or trigger manually"
+        echo ""
+        echo "=========================================="
+        echo ""
+        echo "This workflow will run until GitHub Actions 6-hour limit."
+        echo "A new instance will be triggered by cron every 5.5 hours."
+        echo "Multiple bot instances may run simultaneously (this is acceptable)."
         echo ""
         echo "=========================================="
         echo ""
         
-        # Calculate restart time (5 hours 15 minutes = 315 minutes = 18900 seconds)
-        # Restart earlier to give new workflow time to start before old one stops
-        # GitHub Actions free tier has 6-hour limit, restart at 5h 15m to be safe
-        RESTART_SECONDS=18900  # 5 hours 15 minutes (315 minutes)
         START_TIME=$(date +%s)
-        RESTART_TIME=$((START_TIME + RESTART_SECONDS))
         
-        echo "⏰ Bot will auto-restart at $(date -d @$RESTART_TIME '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "   (This is 5 hours 15 minutes from now to avoid GitHub Actions 6-hour limit)"
-        echo ""
-        
-        # Infinite loop - keeps workflow alive until restart time
+        # Infinite loop - keeps workflow alive until GitHub Actions kills it (6-hour limit)
         while true; do
           CURRENT_TIME=$(date +%s)
-          TIME_UNTIL_RESTART=$((RESTART_TIME - CURRENT_TIME))
-          
-          # Check if it's time to restart (within 60 seconds of restart time)
-          if [ $TIME_UNTIL_RESTART -le 60 ]; then
-            echo ""
-            echo "=========================================="
-            echo "🔄 Auto-restarting workflow to avoid 6-hour limit"
-            echo "   Current time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "   Bot has been running for ~5 hours 15 minutes"
-            echo "=========================================="
-            echo ""
-            
-            # Trigger workflow restart by updating a trigger file
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            
-            # Ensure we have the latest remote state
-            git fetch origin main 2>/dev/null || true
-            git pull origin main --rebase 2>/dev/null || true
-            
-            echo "$(date +%s)" > .trigger
-            git add .trigger
-            
-            # Commit and push with error handling
-            if git commit -m "Auto-restart: Workflow restart before 6-hour limit"; then
-              echo "✅ Trigger file committed successfully"
-              if git push origin main; then
-                echo "✅ Trigger file pushed successfully"
-              else
-                echo "❌ Failed to push trigger file. Retrying..."
-                sleep 2
-                git push origin main || echo "❌ Push failed on retry"
-              fi
-            else
-              echo "❌ Failed to commit trigger file (may already be committed)"
-            fi
-            
-            # Give a moment for the push to complete
-            sleep 5
-            
-            echo "✅ Trigger file pushed. New workflow will start shortly."
-            echo "   Waiting 30 seconds for new workflow to initialize..."
-            sleep 30
-            echo "   This workflow will exit, and the new one will take over."
-            exit 0
-          fi
+          ELAPSED=$((CURRENT_TIME - START_TIME))
+          HOURS_ELAPSED=$((ELAPSED / 3600))
+          MINUTES_ELAPSED=$(( (ELAPSED % 3600) / 60 ))
           
           # Check if bot is still running
           if ! kill -0 $BOT_PID 2>/dev/null; then
@@ -492,12 +451,7 @@ jobs:
           fi
           
           # Show timestamp and status
-          HOURS_ELAPSED=$(( (CURRENT_TIME - START_TIME) / 3600 ))
-          MINUTES_ELAPSED=$(( ((CURRENT_TIME - START_TIME) % 3600) / 60 ))
-          HOURS_UNTIL_RESTART=$((TIME_UNTIL_RESTART / 3600))
-          MINUTES_UNTIL_RESTART=$(( (TIME_UNTIL_RESTART % 3600) / 60 ))
-          
-          echo "[$(date '+%Y-%m-%d %H:%M:%S UTC')] Check #$COUNTER - Bot alive (PID: $BOT_PID) | Running: ${HOURS_ELAPSED}h ${MINUTES_ELAPSED}m | Restart in: ${HOURS_UNTIL_RESTART}h ${MINUTES_UNTIL_RESTART}m"
+          echo "[$(date '+%Y-%m-%d %H:%M:%S UTC')] Check #$COUNTER - Bot alive (PID: $BOT_PID) | Running: ${HOURS_ELAPSED}h ${MINUTES_ELAPSED}m"
           
           # Every 10 checks (50 minutes), show recent logs and Cloudflare status
           if [ $((COUNTER % 10)) -eq 0 ]; then
