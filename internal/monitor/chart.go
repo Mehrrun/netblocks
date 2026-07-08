@@ -3,6 +3,8 @@ package monitor
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/netblocks/netblocks/internal/models"
@@ -10,75 +12,109 @@ import (
 	"github.com/wcharczuk/go-chart/v2/drawing"
 )
 
-// GenerateTrafficChart generates a PNG chart image from traffic data
+// GenerateTrafficChart generates a PNG chart of absolute Iran traffic (24h)
 func GenerateTrafficChart(data *TrafficData) (*bytes.Buffer, error) {
 	if data == nil || len(data.Trend24h) == 0 {
 		return nil, fmt.Errorf("no traffic data available")
 	}
+	return renderAbsoluteLineChart(
+		data.Trend24h,
+		data.Timestamps,
+		data.Status,
+		data.Unit,
+		"Iran Internet Traffic — Absolute (24h)",
+		"Hours Ago",
+		true,
+	)
+}
 
-	// Prepare X values (hours ago)
-	xValues := make([]float64, len(data.Trend24h))
-	for i := range xValues {
-		xValues[i] = float64(len(data.Trend24h) - i - 1) // Hours ago
+// GenerateTrafficChart7d generates a PNG chart of absolute Iran traffic (7d)
+func GenerateTrafficChart7d(data *TrafficData) (*bytes.Buffer, error) {
+	if data == nil || len(data.Trend7d) == 0 {
+		return nil, fmt.Errorf("no 7d traffic data available")
+	}
+	return renderAbsoluteLineChart(
+		data.Trend7d,
+		data.Timestamps7d,
+		data.Status,
+		data.Unit,
+		"Iran Internet Traffic — Absolute (7d)",
+		"Days Ago",
+		false,
+	)
+}
+
+func renderAbsoluteLineChart(values []float64, timestamps []time.Time, status, unit, title, xName string, hourly bool) (*bytes.Buffer, error) {
+	n := len(values)
+	xValues := make([]float64, n)
+	yValues := make([]float64, n)
+	copy(yValues, values)
+
+	// Chronological left→right (oldest → newest)
+	for i := 0; i < n; i++ {
+		xValues[i] = float64(i)
 	}
 
-	// Reverse for chronological order (oldest to newest)
-	for i, j := 0, len(xValues)-1; i < j; i, j = i+1, j-1 {
-		xValues[i], xValues[j] = xValues[j], xValues[i]
+	maxY := 0.0
+	for _, v := range yValues {
+		if v > maxY {
+			maxY = v
+		}
 	}
-
-	yValues := make([]float64, len(data.Trend24h))
-	copy(yValues, data.Trend24h)
-	for i, j := 0, len(yValues)-1; i < j; i, j = i+1, j-1 {
-		yValues[i], yValues[j] = yValues[j], yValues[i]
+	if maxY <= 0 {
+		maxY = 1
 	}
+	yMax := maxY * 1.12
 
-	// Determine line color based on status
-	var lineColor drawing.Color
-	switch data.Status {
-	case "Normal":
-		lineColor = drawing.Color{R: 76, G: 175, B: 80, A: 255} // Green
-	case "Degraded":
-		lineColor = drawing.Color{R: 255, G: 193, B: 7, A: 255} // Yellow
-	case "Throttled":
-		lineColor = drawing.Color{R: 255, G: 152, B: 0, A: 255} // Orange
-	case "Shutdown":
-		lineColor = drawing.Color{R: 244, G: 67, B: 54, A: 255} // Red
-	default:
-		lineColor = chart.ColorBlue
-	}
+	lineColor := statusLineColor(status)
+	yLabel := axisLabelForUnit(unit)
+	points := n
 
-	// Create the chart
 	graph := chart.Chart{
-		Width:  800,
-		Height: 400,
+		Width:  1000,
+		Height: 450,
 		Background: chart.Style{
 			Padding: chart.Box{
-				Top:    50,
-				Left:   20,
-				Right:  20,
-				Bottom: 20,
+				Top:    55,
+				Left:   25,
+				Right:  25,
+				Bottom: 25,
 			},
-			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255}, // White background
+			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255},
 		},
 		XAxis: chart.XAxis{
-			Name:      "Hours Ago",
-			NameStyle: chart.Style{},
-			Style:     chart.Style{},
+			Name: xName,
 			ValueFormatter: func(v interface{}) string {
-				if vf, ok := v.(float64); ok {
-					return fmt.Sprintf("%.0fh", vf)
+				vf, ok := v.(float64)
+				if !ok {
+					return ""
 				}
-				return ""
+				ago := float64(points-1) - vf
+				if ago < 0 {
+					ago = 0
+				}
+				if hourly {
+					return fmt.Sprintf("%.0fh", ago)
+				}
+				return fmt.Sprintf("%.1fd", ago/24.0)
+			},
+			Range: &chart.ContinuousRange{
+				Min: 0,
+				Max: float64(n - 1),
 			},
 		},
 		YAxis: chart.YAxis{
-			Name:      "Traffic Level (%)",
-			NameStyle: chart.Style{},
-			Style:     chart.Style{},
+			Name: yLabel,
 			Range: &chart.ContinuousRange{
 				Min: 0,
-				Max: 100,
+				Max: yMax,
+			},
+			ValueFormatter: func(v interface{}) string {
+				vf, ok := v.(float64)
+				if !ok {
+					return ""
+				}
+				return formatAxisValue(vf, unit)
 			},
 		},
 		Series: []chart.Series{
@@ -88,44 +124,81 @@ func GenerateTrafficChart(data *TrafficData) (*bytes.Buffer, error) {
 				YValues: yValues,
 				Style: chart.Style{
 					StrokeColor: lineColor,
-					StrokeWidth: 3,
+					StrokeWidth: 2.5,
 				},
 			},
 		},
 	}
 
-	// Add title
-	graph.Title = "Iran Internet Traffic (Last 24h)"
-	graph.TitleStyle = chart.Style{
-		FontSize: 16,
-	}
+	graph.Title = title
+	graph.TitleStyle = chart.Style{FontSize: 15}
+	_ = timestamps
 
-	// Render to buffer
 	buffer := bytes.NewBuffer([]byte{})
-	err := graph.Render(chart.PNG, buffer)
-	if err != nil {
+	if err := graph.Render(chart.PNG, buffer); err != nil {
 		return nil, fmt.Errorf("failed to render chart: %w", err)
 	}
-
 	return buffer, nil
 }
 
-// FormatTrafficStatus formats traffic data for text display
+func statusLineColor(status string) drawing.Color {
+	switch status {
+	case "Normal":
+		return drawing.Color{R: 46, G: 125, B: 50, A: 255}
+	case "Degraded":
+		return drawing.Color{R: 245, G: 166, B: 35, A: 255}
+	case "Throttled":
+		return drawing.Color{R: 230, G: 126, B: 34, A: 255}
+	case "Shutdown":
+		return drawing.Color{R: 198, G: 40, B: 40, A: 255}
+	default:
+		return drawing.Color{R: 25, G: 118, B: 210, A: 255}
+	}
+}
+
+func axisLabelForUnit(unit string) string {
+	u := strings.ToLower(unit)
+	switch {
+	case strings.Contains(u, "byte"):
+		return "Traffic Volume"
+	case strings.Contains(u, "request"):
+		return "HTTP Requests"
+	default:
+		if unit != "" {
+			return "Traffic (" + unit + ")"
+		}
+		return "Traffic Volume"
+	}
+}
+
+func formatAxisValue(v float64, unit string) string {
+	u := strings.ToLower(unit)
+	if strings.Contains(u, "byte") {
+		return formatBytes(v)
+	}
+	return formatCompact(v)
+}
+
+// FormatTrafficStatus formats traffic data for photo captions
 func FormatTrafficStatus(data *models.TrafficData) string {
 	if data == nil {
 		return "❌ Traffic data unavailable"
 	}
 
-	timeSince := time.Since(data.LastUpdate)
-	timeStr := formatDuration(timeSince)
+	timeStr := formatDuration(time.Since(data.LastUpdate))
+	current := formatAbsoluteValue(data.CurrentLevel, data.Unit)
+	baseline := formatAbsoluteValue(data.Baseline, data.Unit)
 
 	statusText := fmt.Sprintf(
-		"%s *Traffic Level:* %.1f%%\n"+
-			"📈 *Change:* %+.1f%%\n"+
+		"%s *Iran Traffic (absolute)*\n"+
+			"📶 *Current:* `%s`\n"+
+			"📐 *Baseline:* `%s`\n"+
+			"📈 *Change:* `%+.1f%%`\n"+
 			"📊 *Status:* %s\n"+
 			"⏱ *Updated:* %s ago",
 		data.StatusEmoji,
-		data.CurrentLevel,
+		current,
+		baseline,
 		data.ChangePercent,
 		data.Status,
 		timeStr,
@@ -134,11 +207,9 @@ func FormatTrafficStatus(data *models.TrafficData) string {
 	if data.Status == "Shutdown" || data.Status == "Throttled" {
 		statusText += "\n\n⚠️ *MAJOR DISRUPTION DETECTED*"
 	}
-
 	return statusText
 }
 
-// formatDuration formats a duration into a human-readable string
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%d secs", int(d.Seconds()))
@@ -150,93 +221,83 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d days", int(d.Hours()/24))
 }
 
-// GenerateASNTrafficChart generates a bar chart visualization for ASN traffic data
-// Shows top 10 Iranian ASNs with their names and current bandwidth (independent bars)
+// GenerateASNTrafficChart generates a high-contrast bar chart for ASN traffic share
 func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("no ASN traffic data available")
 	}
 
-	// Limit to top 10 ASNs (already sorted by traffic volume)
-	maxItems := 10
+	maxItems := 20
 	if len(data) > maxItems {
 		data = data[:maxItems]
 	}
 
-	// Prepare data for bar chart - use TrafficVolume (which is percentage from API)
-	// Note: TrafficVolume from Cloudflare API is actually a percentage (0-100)
-	// For netflows endpoint: percentage of total bytes
-	// For HTTP endpoint: percentage of total requests
 	barValues := make([]chart.Value, len(data))
 	maxPercentage := 0.0
 	for i, item := range data {
-		// Use TrafficVolume which contains the percentage value from API
-		percentage := item.TrafficVolume
+		percentage := item.Percentage
 		if percentage > maxPercentage {
 			maxPercentage = percentage
 		}
-		
-		// Create label: "AS12345 - Name" to show both ASN and name
+
 		label := fmt.Sprintf("%s - %s", item.ASN, item.Name)
-		if len(label) > 40 {
-			// Truncate long names but keep ASN visible
-			maxNameLen := 40 - len(item.ASN) - 3 // Reserve space for ASN, " - ", and "..."
-			if maxNameLen > 0 {
-				label = fmt.Sprintf("%s - %s...", item.ASN, item.Name[:maxNameLen])
+		if len(label) > 36 {
+			maxNameLen := 36 - len(item.ASN) - 3
+			if maxNameLen > 0 && len(item.Name) > maxNameLen {
+				label = fmt.Sprintf("%s - %s…", item.ASN, item.Name[:maxNameLen])
 			} else {
-				// If ASN itself is too long, just use ASN
 				label = item.ASN
 			}
 		}
-		
-		// Use light blue color for all bars (white-ish but a bit blue)
-		// Light blue: RGB(173, 216, 230) or similar - slightly lighter
-		barColor := drawing.Color{R: 176, G: 224, B: 230, A: 255} // Light blue (PowderBlue)
-		
+
+		// Darker blue with distinct stroke for visibility on white
+		barColor := drawing.Color{R: 30, G: 136, B: 229, A: 255}
+		stroke := drawing.Color{R: 13, G: 71, B: 161, A: 255}
+
 		barValues[i] = chart.Value{
 			Label: label,
-			Value: percentage, // This is a percentage value from the API
+			Value: percentage,
 			Style: chart.Style{
 				FillColor:   barColor,
-				StrokeColor: barColor,
+				StrokeColor: stroke,
 				StrokeWidth: 1,
 			},
 		}
 	}
 
-	// Create bar chart
-	// Adjust width to accommodate more bars (10 ASNs)
+	if maxPercentage <= 0 {
+		maxPercentage = 1
+	}
+
 	graph := chart.BarChart{
-		Width:  1400, // Wider to accommodate 10 ASN names
-		Height: 600,  // Taller for better readability
+		Width:  1200,
+		Height: 650,
 		Title:  fmt.Sprintf("Top %d Iranian ASNs by Traffic Share", len(data)),
 		TitleStyle: chart.Style{
-			FontSize: 18,
+			FontSize: 16,
 		},
 		Background: chart.Style{
 			Padding: chart.Box{
 				Top:    60,
-				Left:   100, // More left padding for ASN names
-				Right:  20,
-				Bottom: 40,
+				Left:   90,
+				Right:  25,
+				Bottom: 45,
 			},
-			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255}, // White background
+			FillColor: drawing.Color{R: 255, G: 255, B: 255, A: 255},
 		},
-		BarWidth: 35, // Width of each bar (slightly narrower to fit 10 bars better)
+		BarWidth: 28,
 		XAxis: chart.Style{
-			FontSize: 10,
+			FontSize: 9,
 		},
 		YAxis: chart.YAxis{
 			Name:      "Traffic Share (%)",
-			NameStyle: chart.Style{FontSize: 14},
+			NameStyle: chart.Style{FontSize: 12},
 			Range: &chart.ContinuousRange{
 				Min: 0,
-				Max: maxPercentage * 1.1, // Add 10% padding (values are already percentages)
+				Max: math.Min(100, maxPercentage*1.15),
 			},
 			ValueFormatter: func(v interface{}) string {
 				if vf, ok := v.(float64); ok {
-					// Values are already percentages from Cloudflare API
-					// Format as percentage with 1 decimal place
 					return fmt.Sprintf("%.1f%%", vf)
 				}
 				return ""
@@ -245,13 +306,9 @@ func GenerateASNTrafficChart(data []*models.ASTrafficData) (*bytes.Buffer, error
 		Bars: barValues,
 	}
 
-	// Render to buffer
 	buffer := bytes.NewBuffer([]byte{})
-	err := graph.Render(chart.PNG, buffer)
-	if err != nil {
+	if err := graph.Render(chart.PNG, buffer); err != nil {
 		return nil, fmt.Errorf("failed to render ASN traffic bar chart: %w", err)
 	}
-
 	return buffer, nil
 }
-

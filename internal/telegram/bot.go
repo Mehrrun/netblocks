@@ -82,6 +82,21 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 		channelID:        channelID,
 	}
 
+	// Register slash-command hints in Telegram clients
+	cmds := tgbotapi.NewSetMyCommands(
+		tgbotapi.BotCommand{Command: "status", Description: "Iran traffic charts + short summary"},
+		tgbotapi.BotCommand{Command: "dns", Description: "Full Iranian DNS server status"},
+		tgbotapi.BotCommand{Command: "asn", Description: "Full Iranian ASN BGP status"},
+		tgbotapi.BotCommand{Command: "interval", Description: "Set personal update interval (minutes)"},
+		tgbotapi.BotCommand{Command: "help", Description: "Show full help guide"},
+		tgbotapi.BotCommand{Command: "start", Description: "Welcome and quick intro"},
+	)
+	if _, err := api.Request(cmds); err != nil {
+		log.Printf("⚠️  Failed to register bot commands: %v", err)
+	} else {
+		log.Println("✅ Bot commands registered")
+	}
+
 	log.Printf("✅ Bot initialized successfully")
 	return bot, nil
 }
@@ -92,7 +107,7 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 		return
 	}
 	
-	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Bot is now monitoring Iranian networks\n📊 Monitoring %d ASNs and %d+ DNS servers\n⏰ Updates will be sent every 20 minutes\n\nBot started at: `%s`",
+	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Monitoring Iranian networks via Cloudflare Radar + RIPE RIS\n📊 Tracking %d ASNs and %d DNS servers\n📈 Channel posts: absolute traffic charts + short summary\n⏰ Channel updates about every 20 minutes\n\nUse /help for commands · Bot started: `%s`",
 		len(b.config.IranASNs),
 		len(b.config.DNSServers),
 		time.Now().Format("2006-01-02 15:04:05"))
@@ -170,13 +185,19 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 	case strings.HasPrefix(command, "/status"):
 		log.Println("📤 Sending status update...")
 		b.sendStatus(msg.Chat.ID)
+	case strings.HasPrefix(command, "/dns"):
+		log.Println("📤 Sending DNS status...")
+		b.sendDNSOnly(msg.Chat.ID)
+	case strings.HasPrefix(command, "/asn"):
+		log.Println("📤 Sending ASN status...")
+		b.sendASNOnly(msg.Chat.ID)
 	case strings.HasPrefix(command, "/interval"):
 		parts := strings.Fields(command)
 		if len(parts) > 1 {
 			log.Printf("📤 Setting interval to %s minutes...", parts[1])
 			b.handleSetInterval(msg.Chat.ID, parts[1])
 		} else {
-			b.sendMessage(msg.Chat.ID, "Usage: /interval <minutes>\nExample: /interval 5")
+			b.sendMessage(msg.Chat.ID, "Usage: `/interval <minutes>`\nExample: `/interval 20`")
 		}
 	case strings.HasPrefix(command, "/help"):
 		log.Println("📤 Sending help message...")
@@ -208,34 +229,44 @@ func (b *Bot) getSubscribedChats() []int64 {
 
 func (b *Bot) sendWelcome(chatID int64) {
 	intervalMinutes := int(b.getUpdateInterval().Minutes())
-	
-	text := fmt.Sprintf(`🤖 Welcome to NetBlocks Monitor Bot!
 
-I monitor:
-• Iranian AS (Autonomous Systems) connectivity via BGP
-• Iranian DNS servers availability
+	text := fmt.Sprintf("🤖 *Welcome to NetBlocks*\n\n"+
+		"I track Iran's internet health using:\n"+
+		"• *Cloudflare Radar* — absolute traffic volume & ISP share\n"+
+		"• *RIPE RIS Live* — Iranian ASN BGP connectivity\n"+
+		"• *DNS probes* — Iranian resolver / nameserver liveness\n\n"+
+		"*/status* sends charts first (not the long DNS list).\n"+
+		"Use */help* for the full guide.\n\n"+
+		"Personal updates every *%d* minutes — change with /interval.", intervalMinutes)
 
-Commands:
-/status - Get current monitoring status
-/interval <minutes> - Set periodic update interval
-/help - Show help message
-
-You will receive automatic updates every %d minutes. Use /interval to change this.`, intervalMinutes)
-	
 	b.sendMessage(chatID, text)
 }
 
 func (b *Bot) sendHelp(chatID int64) {
-	text := `📖 NetBlocks Monitor Bot Commands:
+	text := `📖 *NetBlocks Help*
 
-/start - Start the bot and see welcome message
-/status - Get current status of all monitored systems
-/interval <minutes> - Set monitoring check interval (e.g., /interval 5)
-/help - Show this help message
+*Commands*
+/status — Iran absolute traffic charts + top ISP/ASN share + short alive counts
+/dns — Full Iranian DNS server list (alive/down, by city)
+/asn — Full Iranian ASN BGP connectivity list
+/interval ` + "`<minutes>`" + ` — Personal DM update interval (example: /interval 20)
+/help — This guide
+/start — Short welcome
 
-Example:
-/interval 20 - Set interval to 20 minutes (default)`
-	
+*What the charts show*
+• *24h Iran chart* — absolute Cloudflare NetFlows volume (not % of peak)
+• *Top ASNs* — share of Iran traffic by ISP / AS
+• *7d chart* (when available) — longer absolute trend
+
+*Traffic status colors*
+🟢 Normal · 🟡 Degraded · 🟠 Throttled · 🔴 Shutdown
+(compared to a recent baseline window)
+
+*Tips*
+• Channel posts use the same chart-first format
+• Use /dns or /asn only when you need the full lists — they are long
+• Data sources: Cloudflare Radar + RIPE RIS Live`
+
 	b.sendMessage(chatID, text)
 }
 
@@ -285,26 +316,93 @@ func (b *Bot) sendStatus(chatID int64) {
 		return
 	}
 
-	// Split status into multiple messages to avoid Telegram's 4096 character limit
 	b.sendStatusMessages(chatID, result)
+}
+
+func (b *Bot) sendDNSOnly(chatID int64) {
+	if b.onStatusUpdate == nil {
+		b.sendMessage(chatID, "❌ Status update function not available")
+		return
+	}
+	result, err := b.onStatusUpdate()
+	if err != nil {
+		b.sendMessage(chatID, fmt.Sprintf("❌ Error getting status: %v", err))
+		return
+	}
+	dnsText := b.formatDNSStatus(result)
+	if dnsText == "" {
+		b.sendMessage(chatID, "❌ DNS status unavailable")
+		return
+	}
+	b.sendMessage(chatID, dnsText)
+}
+
+func (b *Bot) sendASNOnly(chatID int64) {
+	if b.onStatusUpdate == nil {
+		b.sendMessage(chatID, "❌ Status update function not available")
+		return
+	}
+	result, err := b.onStatusUpdate()
+	if err != nil {
+		b.sendMessage(chatID, fmt.Sprintf("❌ Error getting status: %v", err))
+		return
+	}
+	asnText := b.formatASNStatus(result)
+	if asnText == "" {
+		b.sendMessage(chatID, "❌ ASN status unavailable")
+		return
+	}
+	b.sendMessage(chatID, asnText)
+}
+
+// formatStatusSummary builds a short alive-count summary for chart-first status
+func (b *Bot) formatStatusSummary(result *models.MonitoringResult) string {
+	asnUp, asnTotal := 0, len(result.ASNStatuses)
+	for _, s := range result.ASNStatuses {
+		if s != nil && s.Connected {
+			asnUp++
+		}
+	}
+	dnsUp, dnsTotal := 0, len(result.DNSStatuses)
+	for _, s := range result.DNSStatuses {
+		if s != nil && s.Alive {
+			dnsUp++
+		}
+	}
+
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("📊 *NetBlocks Status*\n⏰ `%s`\n\n",
+		result.Timestamp.Format("2006-01-02 15:04:05")))
+	builder.WriteString(fmt.Sprintf("🌐 *ASNs:* `%d/%d` up\n", asnUp, asnTotal))
+	builder.WriteString(fmt.Sprintf("🔍 *DNS:* `%d/%d` alive\n", dnsUp, dnsTotal))
+
+	if result.TrafficData != nil {
+		builder.WriteString(fmt.Sprintf("%s *Traffic:* %s (`%+.1f%%` vs baseline)\n",
+			result.TrafficData.StatusEmoji,
+			result.TrafficData.Status,
+			result.TrafficData.ChangePercent))
+	} else {
+		builder.WriteString("📶 *Traffic:* unavailable\n")
+	}
+
+	builder.WriteString("\n_Full lists: /dns · /asn · Guide: /help_")
+	return builder.String()
 }
 
 // formatStatus formats the complete status (for logging)
 func (b *Bot) formatStatus(result *models.MonitoringResult) string {
 	var builder strings.Builder
-	
+
 	builder.WriteString("📊 NetBlocks Monitoring Status\n")
 	builder.WriteString(fmt.Sprintf("⏰ Last Update: %s\n\n", result.Timestamp.Format("2006-01-02 15:04:05")))
-	
-	// ASN Status
+
 	asnText := b.formatASNStatus(result)
 	builder.WriteString(asnText)
 	builder.WriteString("\n")
-	
-	// DNS Status
+
 	dnsText := b.formatDNSStatus(result)
 	builder.WriteString(dnsText)
-	
+
 	return builder.String()
 }
 
@@ -650,51 +748,36 @@ func (b *Bot) sendMessage(chatID interface{}, text string) {
 	}
 }
 
-// sendStatusMessages sends status in multiple messages
-// ORDER: Header -> ASN status -> DNS status -> Traffic Chart (diagram LAST)
-// chatID can be int64 (user) or string (channel username)
+// sendStatusMessages sends chart-first status: summary → 24h → ASN → optional 7d
 func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringResult) {
-	// Send header
-	header := fmt.Sprintf("📊 *NetBlocks Monitoring Status*\n⏰ Last Update: `%s`\n", 
-		result.Timestamp.Format("2006-01-02 15:04:05"))
-	b.sendMessage(chatID, header)
-	
-	// Send ASN status (after diagram)
-	asnText := b.formatASNStatus(result)
-	if asnText != "" {
-		b.sendMessage(chatID, asnText)
-	}
-	
-	// Send DNS status (after diagram and ASN)
-	dnsText := b.formatDNSStatus(result)
-	if dnsText != "" {
-		b.sendMessage(chatID, dnsText)
-	}
+	b.sendMessage(chatID, b.formatStatusSummary(result))
 
-	// Send traffic chart (diagram after other data)
 	if result.TrafficData != nil {
 		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
-			log.Printf("📈 Sending Iran traffic chart (after ASN/DNS data)")
+			log.Printf("📈 Sending Iran 24h absolute traffic chart")
 			b.sendTrafficChart(chatID, result.TrafficData)
 		} else {
-			log.Printf("⚠️  Traffic chart buffer is empty - skipping chart")
+			log.Printf("⚠️  Traffic chart buffer is empty - skipping 24h chart")
 		}
 	} else {
 		log.Printf("⚠️  Traffic data is nil - no chart available")
 	}
 
-	// Send ASN traffic chart after Iran traffic chart
 	if result.ASTrafficData != nil && len(result.ASTrafficData) > 0 {
-		// Get chart buffer from first item (all items share the same chart)
 		firstItem := result.ASTrafficData[0]
 		if firstItem.ChartBuffer != nil && firstItem.ChartBuffer.Len() > 0 {
-			log.Printf("📊 Sending ASN traffic chart (after Iran traffic chart)")
+			log.Printf("📊 Sending ASN traffic chart")
 			b.sendASNTrafficChart(chatID, result.ASTrafficData, firstItem.ChartBuffer)
 		} else {
 			log.Printf("⚠️  ASN traffic chart buffer is empty - skipping chart")
 		}
 	} else {
 		log.Printf("⚠️  ASN traffic data is nil or empty - no ASN chart available")
+	}
+
+	if result.TrafficData != nil && result.TrafficData.Chart7dBuffer != nil && result.TrafficData.Chart7dBuffer.Len() > 0 {
+		log.Printf("📈 Sending Iran 7d absolute traffic chart")
+		b.sendTrafficChart7d(chatID, result.TrafficData)
 	}
 }
 
@@ -800,19 +883,19 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	}
 }
 
-// sendTrafficChart sends the traffic chart as a photo with caption
+// sendTrafficChart sends the 24h traffic chart as a photo with caption
 func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	if data == nil || data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
 		return
 	}
-	
+
 	caption := monitor.FormatTrafficStatus(data)
-	
+
 	fileBytes := tgbotapi.FileBytes{
 		Name:  "iran_traffic_24h.png",
 		Bytes: data.ChartBuffer.Bytes(),
 	}
-	
+
 	var photo tgbotapi.PhotoConfig
 	switch id := chatID.(type) {
 	case int64:
@@ -822,43 +905,73 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	default:
 		return
 	}
-	
+
 	photo.Caption = caption
 	photo.ParseMode = tgbotapi.ModeMarkdown
-	
-	_, _ = b.api.Send(photo)
+
+	if _, err := b.api.Send(photo); err != nil {
+		log.Printf("Error sending 24h traffic chart: %v", err)
+	}
+}
+
+// sendTrafficChart7d sends the 7d absolute traffic chart
+func (b *Bot) sendTrafficChart7d(chatID interface{}, data *models.TrafficData) {
+	if data == nil || data.Chart7dBuffer == nil || data.Chart7dBuffer.Len() == 0 {
+		return
+	}
+
+	caption := fmt.Sprintf("%s *Iran Traffic — Absolute (7d)*\n📈 Change vs mid-window baseline: `%+.1f%%`\n📊 Status: %s",
+		data.StatusEmoji, data.ChangePercent, data.Status)
+
+	fileBytes := tgbotapi.FileBytes{
+		Name:  "iran_traffic_7d.png",
+		Bytes: data.Chart7dBuffer.Bytes(),
+	}
+
+	var photo tgbotapi.PhotoConfig
+	switch id := chatID.(type) {
+	case int64:
+		photo = tgbotapi.NewPhoto(id, fileBytes)
+	case string:
+		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
+	default:
+		return
+	}
+
+	photo.Caption = caption
+	photo.ParseMode = tgbotapi.ModeMarkdown
+
+	if _, err := b.api.Send(photo); err != nil {
+		log.Printf("Error sending 7d traffic chart: %v", err)
+	}
 }
 
 // sendASNTrafficChart sends the ASN traffic chart as a photo with caption
-// Follows the exact same pattern as sendTrafficChart for consistency
 func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficData, chartBuffer *bytes.Buffer) {
 	if len(data) == 0 || chartBuffer == nil || chartBuffer.Len() == 0 {
 		log.Printf("⚠️  ASN traffic chart data or buffer is empty - skipping send")
 		return
 	}
-	
-	// Create caption with summary - similar to FormatTrafficStatus
+
 	var caption strings.Builder
-	caption.WriteString(fmt.Sprintf("📊 *Top %d Iranian ASNs by Traffic*\n\n", len(data)))
-	
-	// Show top 5 ASNs in caption
+	caption.WriteString(fmt.Sprintf("📊 *Top %d Iranian ASNs by Traffic Share*\n\n", len(data)))
+
 	maxShow := 5
 	if len(data) < maxShow {
 		maxShow = len(data)
 	}
-	
+
 	for i := 0; i < maxShow; i++ {
 		item := data[i]
-		caption.WriteString(fmt.Sprintf("%s *%s*\n   └─ %.2f%% of total traffic\n",
+		caption.WriteString(fmt.Sprintf("%s *%s*\n   └─ `%.2f%%` of Iran traffic\n",
 			item.StatusEmoji, item.Name, item.Percentage))
 	}
-	
-	// Use same pattern as sendTrafficChart
+
 	fileBytes := tgbotapi.FileBytes{
-		Name:  "asn_traffic_top10.png",
+		Name:  "asn_traffic_top.png",
 		Bytes: chartBuffer.Bytes(),
 	}
-	
+
 	var photo tgbotapi.PhotoConfig
 	switch id := chatID.(type) {
 	case int64:
@@ -869,10 +982,10 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 		log.Printf("Error: invalid chatID type for ASN chart: %T", chatID)
 		return
 	}
-	
+
 	photo.Caption = caption.String()
 	photo.ParseMode = tgbotapi.ModeMarkdown
-	
+
 	_, err := b.api.Send(photo)
 	if err != nil {
 		log.Printf("Error sending ASN traffic chart: %v", err)

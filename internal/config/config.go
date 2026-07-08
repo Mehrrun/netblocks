@@ -94,6 +94,22 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// Accept uppercase CLOUDFLARE_TOKEN from older config files
+	if config.CloudflareToken == "" {
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(data, &raw) == nil {
+			for _, key := range []string{"CLOUDFLARE_TOKEN", "CloudflareToken"} {
+				if v, ok := raw[key]; ok {
+					var token string
+					if json.Unmarshal(v, &token) == nil && token != "" {
+						config.CloudflareToken = token
+						break
+					}
+				}
+			}
+		}
+	}
+
 	// Set defaults if empty
 	if config.RISLiveURL == "" {
 		config.RISLiveURL = "wss://ris-live.ripe.net/v1/ws/?client=netblocks"

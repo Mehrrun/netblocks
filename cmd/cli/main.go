@@ -179,16 +179,25 @@ func printStatus(result *models.MonitoringResult) {
 func saveChartsToFiles(result *models.MonitoringResult, outputDir string) {
 	timestamp := result.Timestamp.Format("20060102_150405")
 	
-	// Save Iran traffic chart
+	// Save Iran traffic charts
 	if result.TrafficData != nil && result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
 		filename := fmt.Sprintf("%s/iran_traffic_%s.png", outputDir, timestamp)
 		if err := os.WriteFile(filename, result.TrafficData.ChartBuffer.Bytes(), 0644); err != nil {
 			log.Printf("⚠️  Failed to save Iran traffic chart: %v", err)
 		} else {
-			fmt.Printf("\n✅ Iran traffic chart saved: %s\n", filename)
+			fmt.Printf("\n✅ Iran 24h traffic chart saved: %s\n", filename)
 		}
 	} else {
-		fmt.Printf("\n⚠️  Iran traffic chart not available\n")
+		fmt.Printf("\n⚠️  Iran 24h traffic chart not available\n")
+	}
+
+	if result.TrafficData != nil && result.TrafficData.Chart7dBuffer != nil && result.TrafficData.Chart7dBuffer.Len() > 0 {
+		filename := fmt.Sprintf("%s/iran_traffic_7d_%s.png", outputDir, timestamp)
+		if err := os.WriteFile(filename, result.TrafficData.Chart7dBuffer.Bytes(), 0644); err != nil {
+			log.Printf("⚠️  Failed to save Iran 7d traffic chart: %v", err)
+		} else {
+			fmt.Printf("✅ Iran 7d traffic chart saved: %s\n", filename)
+		}
 	}
 	
 	// Save ASN traffic chart

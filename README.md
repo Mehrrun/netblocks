@@ -6,13 +6,13 @@ NetBlocks is a comprehensive network monitoring tool designed to monitor Iranian
 
 - **BGP Monitoring**: Real-time monitoring of Iranian AS connectivity using RIPE RIS Live WebSocket API
 - **DNS Monitoring**: Continuous monitoring of Iranian DNS servers' availability and response times
-- **Traffic Monitoring**: Visual traffic analysis using Cloudflare Radar API with PNG chart generation
-- **Telegram Bot**: Interactive bot for checking network status and configuring monitoring intervals
+- **Traffic Monitoring**: Absolute Iran bandwidth via Cloudflare Radar NetFlows (not peak-relative %)
+- **Telegram Bot**: Chart-first status updates; full DNS/ASN lists on demand
 - **CLI Interface**: Command-line tool for monitoring and status reporting
 - **Configurable Intervals**: Set custom monitoring intervals via Telegram bot or CLI
-- **Periodic Analysis**: Automatic analysis runs every 10 minutes to check network connectivity
+- **Periodic Analysis**: Automatic channel updates about every 20 minutes
 - **Readable Output**: Elegant formatting with emojis and clear status indicators
-- **Visual Charts**: Professional PNG charts showing Iran's internet traffic trends (24-hour)
+- **Visual Charts**: Absolute 24h + 7d Iran traffic line charts and top ASN share bars
 
 ## Architecture
 
@@ -143,12 +143,14 @@ Or add it to `config.json`
 ```
 
 4. Start chatting with your bot on Telegram:
-   - `/start` - Welcome message
-   - `/status` - Get current monitoring status
-   - `/interval <minutes>` - Set monitoring interval (e.g., `/interval 10`)
-   - `/help` - Show help message
+   - `/start` — Short welcome
+   - `/status` — Absolute traffic charts + top ISP/ASN share + short alive counts
+   - `/dns` — Full Iranian DNS server list (alive/down, by city)
+   - `/asn` — Full Iranian ASN BGP connectivity list
+   - `/interval <minutes>` — Personal DM update interval (e.g., `/interval 20`)
+   - `/help` — Full guide (charts, status colors, tips)
 
-The bot automatically runs analysis every 10 minutes to check network connectivity.
+Channel posts use the same chart-first format (about every 20 minutes).
 
 ## Monitoring Details
 
@@ -175,15 +177,14 @@ DNS monitoring includes:
 ### Traffic Monitoring
 
 Traffic monitoring provides:
-- Real-time Iran internet traffic analysis via Cloudflare Radar API
-- 24-hour traffic trend visualization with PNG charts
-- Traffic level percentage calculations
-- Change detection (vs baseline)
-- Status classification: Normal (>70%), Degraded (30-70%), Throttled (10-30%), Shutdown (<10%)
-- Visual charts sent as images in Telegram
-- 5-minute caching to avoid API rate limits
-- Background refresh every 10 minutes
-- Requires Cloudflare API credentials (email + API key)
+- Absolute Iran NetFlows volume via Cloudflare Radar (primary), HTTP timeseries fallback
+- 24-hour and 7-day absolute traffic PNG charts (auto-scaled Y-axis with real units)
+- Top Iranian ASNs by traffic share (up to 20)
+- Change detection vs a recent baseline window (not % of peak)
+- Status classification vs baseline: Normal (>70%), Degraded (30–70%), Throttled (10–30%), Shutdown (<10%)
+- Charts sent as images in Telegram; full DNS/ASN text via `/dns` and `/asn`
+- 5-minute caching; background refresh every 10 minutes
+- Requires `CLOUDFLARE_TOKEN` with Radar Read permission
 
 ## Monitored Iranian ASNs
 
@@ -451,7 +452,10 @@ DNS monitoring uses standard DNS queries (A record lookups for `leader.ir`) to t
 ### Cloudflare Radar API
 
 Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare.com/radar/) for Iran's internet traffic data:
-- Endpoint: `https://api.cloudflare.com/client/v4/radar/http/timeseries_groups/bandwidth`
+- **Iran absolute volume (24h / 7d):** `GET /radar/netflows/timeseries?location=IR&dateRange=1d|7d&aggInterval=1h`
+- **Top ASNs by share:** `GET /radar/netflows/top/ases?location=IR&dateRange=1d&limit=20`
+- Fallback: `/radar/http/timeseries` (request counts) if NetFlows is unavailable
+- Values are kept **absolute** (no divide-by-window-max normalization)
 - **Authentication**: API Token with "Radar Read" permission (recommended)
 - Get your API Token: https://dash.cloudflare.com/profile/api-tokens
   1. Click "Create Token"
@@ -459,7 +463,6 @@ Traffic monitoring uses the [Cloudflare Radar API](https://developers.cloudflare
   3. Add permission: **Account → Radar → Read**
   4. Click "Continue to summary" → "Create Token"
   5. Copy the token
-- 24-hour historical data with 1-hour aggregation intervals
 - Chart generation using [go-chart library](https://github.com/wcharczuk/go-chart)
 
 **Configuration (Recommended for GitHub):**
@@ -479,17 +482,15 @@ Or add `CLOUDFLARE_TOKEN` to GitHub Secrets for automated deployment.
 - Summary statistics with emojis
 
 ### Telegram Bot Output
-- Markdown formatted messages
-- 🟢 Green circle = Connected/Alive
-- 🔴 Red circle = Disconnected/Down
-- Hierarchical display with tree-style formatting
-- Summary statistics
-- **Traffic charts sent as PNG images** with:
-  - 800x400px line chart
-  - 24-hour traffic trend
+- Chart-first `/status` and channel posts: short summary + PNG charts
+- Full DNS/ASN lists only via `/dns` and `/asn`
+- Markdown formatted messages with status emojis
+- **Traffic charts (PNG):**
+  - Absolute 24h Iran NetFlows line chart (~1000×450)
+  - Optional absolute 7d trend chart
+  - Top ASN traffic-share bars (~1200×650), high-contrast blue
   - Color-coded status (Green=Normal, Yellow=Degraded, Orange=Throttled, Red=Shutdown)
-  - Traffic level percentage
-  - Change percentage vs baseline
+  - Absolute current/baseline values + change % vs baseline
 
 ## Troubleshooting
 
