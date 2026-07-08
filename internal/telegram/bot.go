@@ -105,6 +105,10 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 
 const publicBotLink = "https://t.me/NetBlocksIranBlackout_bot"
 
+// publicBotLinkMD escapes underscores for Telegram legacy Markdown
+// (otherwise NetBlocksIranBlackout_bot breaks parsing and the message is dropped)
+const publicBotLinkMD = "https://t.me/NetBlocksIranBlackout\\_bot"
+
 // botLink returns the public bot link for channel followers
 func (b *Bot) botLink() string {
 	return publicBotLink
@@ -117,10 +121,11 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 	}
 
 	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n"+
-		"📈 Channel posts: Iran traffic charts only\n"+
-		"🤖 Open the bot for DNS/ASN details & commands:\n%s\n\n"+
+		"📈 Channel posts: Iran traffic charts only\n\n"+
+		"🤖 *Use the bot for DNS/ASN details & commands:*\n"+
+		"%s\n\n"+
 		"Bot started: `%s`",
-		publicBotLink,
+		publicBotLinkMD,
 		time.Now().Format("2006-01-02 15:04:05"))
 
 	log.Printf("📤 Sending startup message to channel: %s", b.channelID)
@@ -248,36 +253,32 @@ func (b *Bot) sendWelcome(chatID int64) {
 		"*/status* → charts + short summary\n"+
 		"*/dns* / */asn* → full lists when you need them\n"+
 		"*/help* → full guide\n\n"+
-		"🔗 %s\n\n"+
+		"🔗 Bot: %s\n\n"+
 		"Personal updates every *%d* minutes — change with /interval.",
-		publicBotLink, intervalMinutes)
+		publicBotLinkMD, intervalMinutes)
 
 	b.sendMessage(chatID, text)
 }
 
 func (b *Bot) sendHelp(chatID int64) {
-	text := `📖 *NetBlocks Help*
-
-🔗 ` + publicBotLink + `
-
-*Commands*
-/status — Iran traffic charts + top ISP/ASN share + short counts
-/dns — Full Iranian DNS server list
-/asn — Full Iranian ASN BGP list
-/interval ` + "`<minutes>`" + ` — Personal update interval (e.g. /interval 20)
-/help — This guide
-/start — Short welcome
-
-*How to read charts*
-• Iran 24h / 7d: Cloudflare *volume index* (~0–1), *not* bytes. Higher = more traffic.
-• Top ASNs: share of Iran traffic by ISP (percent)
-
-*Traffic status*
-🟢 Normal · 🟡 Degraded · 🟠 Throttled · 🔴 Shutdown
-
-*Tips*
-• Channel posts are charts only — open the bot for DNS/ASN details
-• Data: Cloudflare Radar + RIPE RIS Live`
+	text := fmt.Sprintf("📖 *NetBlocks Help*\n\n"+
+		"🔗 Bot: %s\n\n"+
+		"*Commands*\n"+
+		"/status — Iran traffic charts + top ISP/ASN share + short counts\n"+
+		"/dns — Full Iranian DNS server list\n"+
+		"/asn — Full Iranian ASN BGP list\n"+
+		"/interval <minutes> — Personal update interval (e.g. /interval 20)\n"+
+		"/help — This guide\n"+
+		"/start — Short welcome\n\n"+
+		"*How to read charts*\n"+
+		"• Iran 24h / 7d: Cloudflare volume index (~0–1), not bytes. Higher = more traffic.\n"+
+		"• Top ASNs: share of Iran traffic by ISP (percent)\n\n"+
+		"*Traffic status*\n"+
+		"🟢 Normal · 🟡 Degraded · 🟠 Throttled · 🔴 Shutdown\n\n"+
+		"*Tips*\n"+
+		"• Channel posts are charts only — open the bot for DNS/ASN details\n"+
+		"• Data: Cloudflare Radar + RIPE RIS Live",
+		publicBotLinkMD)
 
 	b.sendMessage(chatID, text)
 }
@@ -393,20 +394,22 @@ func (b *Bot) formatStatusSummary(result *models.MonitoringResult) string {
 			result.TrafficData.StatusEmoji,
 			result.TrafficData.Status,
 			result.TrafficData.ChangePercent))
-		builder.WriteString("_Y-axis is Cloudflare volume index (~0–1), not bytes._\n")
+		builder.WriteString("Y-axis is Cloudflare volume index (~0–1), not bytes.\n")
 	} else {
 		builder.WriteString("📶 *Traffic:* unavailable\n")
 	}
 
-	builder.WriteString(fmt.Sprintf("\n🔗 %s", publicBotLink))
-	builder.WriteString("\n_Full lists: /dns · /asn · Guide: /help_")
+	builder.WriteString(fmt.Sprintf("\n🔗 Bot: %s", publicBotLinkMD))
+	builder.WriteString("\nFull lists: /dns · /asn · Guide: /help")
 	return builder.String()
 }
 
 // formatChannelSummary is charts-only intro for the public channel (no DNS/ASN lists)
 func (b *Bot) formatChannelSummary(result *models.MonitoringResult) string {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("📊 *Iran Internet Status*\n⏰ `%s`\n\n",
+	builder.WriteString("🤖 *NetBlocks* — Iran internet monitor\n")
+	builder.WriteString(fmt.Sprintf("🔗 Open the bot: %s\n\n", publicBotLinkMD))
+	builder.WriteString(fmt.Sprintf("📊 *Status*\n⏰ `%s`\n\n",
 		result.Timestamp.Format("2006-01-02 15:04:05")))
 
 	if result.TrafficData != nil {
@@ -414,12 +417,12 @@ func (b *Bot) formatChannelSummary(result *models.MonitoringResult) string {
 			result.TrafficData.StatusEmoji,
 			result.TrafficData.Status,
 			result.TrafficData.ChangePercent))
-		builder.WriteString("_Charts: Cloudflare volume index (~0–1). Higher = more traffic._\n")
+		builder.WriteString("Charts: Cloudflare volume index (~0–1). Higher = more traffic.\n")
 	} else {
 		builder.WriteString("📶 *Traffic:* unavailable\n")
 	}
 
-	builder.WriteString(fmt.Sprintf("\n🤖 Open the bot for DNS/ASN details:\n%s", publicBotLink))
+	builder.WriteString(fmt.Sprintf("\nUse the bot for DNS/ASN details:\n%s", publicBotLinkMD))
 	return builder.String()
 }
 
@@ -681,44 +684,47 @@ func printCitySection(builder *strings.Builder, city string, types map[string][]
 	}
 }
 
-// sendMessage sends a message to a chat (user or channel)
-// chatID can be an int64 for users or a string for channel username (e.g., "@channel")
+func (b *Bot) newTextMessage(chatID interface{}, text string) (tgbotapi.MessageConfig, bool) {
+	switch id := chatID.(type) {
+	case int64:
+		return tgbotapi.NewMessage(id, text), true
+	case string:
+		return tgbotapi.NewMessageToChannel(id, text), true
+	default:
+		log.Printf("Error: invalid chatID type: %T", chatID)
+		return tgbotapi.MessageConfig{}, false
+	}
+}
+
+// sendMessage sends a message to a chat (user or channel).
+// Tries Markdown first; on parse errors retries as plain text so /help and bot links still arrive.
 func (b *Bot) sendMessage(chatID interface{}, text string) {
 	const maxMessageLength = 4096
-	
-	// Split message if it's too long
+
 	if len(text) <= maxMessageLength {
-		var msg tgbotapi.MessageConfig
-		
-		// Handle both int64 (user chat ID) and string (channel username)
-		switch id := chatID.(type) {
-		case int64:
-			msg = tgbotapi.NewMessage(id, text)
-		case string:
-			msg = tgbotapi.NewMessageToChannel(id, text)
-		default:
-			log.Printf("Error: invalid chatID type: %T", chatID)
+		msg, ok := b.newTextMessage(chatID, text)
+		if !ok {
 			return
 		}
-		
 		msg.ParseMode = tgbotapi.ModeMarkdown
+		msg.DisableWebPagePreview = false
 		sentMsg, err := b.api.Send(msg)
 		if err != nil {
-			log.Printf("❌ ERROR sending message to %v: %v", chatID, err)
-			// For channels, provide helpful error message
-			if channelName, ok := chatID.(string); ok {
-				log.Printf("⚠️  CHANNEL ERROR DETAILS:")
-				log.Printf("   Channel: %v", channelName)
-				log.Printf("   Error: %v", err)
-				log.Printf("⚠️  TROUBLESHOOTING:")
-				log.Printf("   1. Make sure the bot is added as an administrator to the channel")
-				log.Printf("   2. Bot must have 'Post messages' permission")
-				log.Printf("   3. If using username (@channel), try numeric channel ID (e.g., -1001234567890)")
-				log.Printf("   4. Check if channel exists and is accessible")
+			log.Printf("⚠️  Markdown send failed to %v: %v — retrying plain text", chatID, err)
+			plain, ok := b.newTextMessage(chatID, text)
+			if !ok {
+				return
 			}
-		} else {
-			log.Printf("✅ Successfully sent message to %v (message ID: %d, chat ID: %d)", chatID, sentMsg.MessageID, sentMsg.Chat.ID)
+			sentMsg, err = b.api.Send(plain)
+			if err != nil {
+				log.Printf("❌ ERROR sending message to %v: %v", chatID, err)
+				if channelName, ok := chatID.(string); ok {
+					log.Printf("⚠️  CHANNEL ERROR: %v — ensure bot is admin with Post messages", channelName)
+				}
+				return
+			}
 		}
+		log.Printf("✅ Successfully sent message to %v (message ID: %d, chat ID: %d)", chatID, sentMsg.MessageID, sentMsg.Chat.ID)
 		return
 	}
 	
@@ -926,19 +932,11 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 	}
 }
 
-// sendTrafficChart sends the 24h traffic chart as a photo with caption
-func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
-	if data == nil || data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
+func (b *Bot) sendPhoto(chatID interface{}, name string, buf *bytes.Buffer, caption string) {
+	if buf == nil || buf.Len() == 0 {
 		return
 	}
-
-	caption := monitor.FormatTrafficStatus(data)
-
-	fileBytes := tgbotapi.FileBytes{
-		Name:  "iran_traffic_24h.png",
-		Bytes: data.ChartBuffer.Bytes(),
-	}
-
+	fileBytes := tgbotapi.FileBytes{Name: name, Bytes: buf.Bytes()}
 	var photo tgbotapi.PhotoConfig
 	switch id := chatID.(type) {
 	case int64:
@@ -948,13 +946,23 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	default:
 		return
 	}
-
 	photo.Caption = caption
 	photo.ParseMode = tgbotapi.ModeMarkdown
-
 	if _, err := b.api.Send(photo); err != nil {
-		log.Printf("Error sending 24h traffic chart: %v", err)
+		log.Printf("⚠️  Markdown photo caption failed (%s): %v — retrying plain", name, err)
+		photo.ParseMode = ""
+		if _, err2 := b.api.Send(photo); err2 != nil {
+			log.Printf("Error sending photo %s: %v", name, err2)
+		}
 	}
+}
+
+// sendTrafficChart sends the 24h traffic chart as a photo with caption
+func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
+	if data == nil || data.ChartBuffer == nil || data.ChartBuffer.Len() == 0 {
+		return
+	}
+	b.sendPhoto(chatID, "iran_traffic_24h.png", data.ChartBuffer, monitor.FormatTrafficStatus(data))
 }
 
 // sendTrafficChart7d sends the 7d traffic chart
@@ -963,39 +971,12 @@ func (b *Bot) sendTrafficChart7d(chatID interface{}, data *models.TrafficData) {
 		return
 	}
 
-	heading := "*Iran Traffic — Volume Index (7d)*"
-	current := fmt.Sprintf("%.3f (index)", data.CurrentLevel)
-	howToRead := "\n📖 Y-axis ≈ `0`–`1` (Cloudflare index), *not* bytes. Higher = more traffic."
-
-	caption := fmt.Sprintf("%s %s\n📶 *Current:* `%s`\n📈 *Change:* `%+.1f%%`\n📊 *Status:* %s%s",
+	caption := fmt.Sprintf("%s *Iran Traffic — Volume Index (7d)*\n📶 *Current:* `%.3f` (index)\n📈 *Change:* `%+.1f%%`\n📊 *Status:* %s\n📖 Y-axis ~0–1 (Cloudflare index), not bytes.",
 		data.StatusEmoji,
-		heading,
-		current,
+		data.CurrentLevel,
 		data.ChangePercent,
-		data.Status,
-		howToRead)
-
-	fileBytes := tgbotapi.FileBytes{
-		Name:  "iran_traffic_7d.png",
-		Bytes: data.Chart7dBuffer.Bytes(),
-	}
-
-	var photo tgbotapi.PhotoConfig
-	switch id := chatID.(type) {
-	case int64:
-		photo = tgbotapi.NewPhoto(id, fileBytes)
-	case string:
-		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
-	default:
-		return
-	}
-
-	photo.Caption = caption
-	photo.ParseMode = tgbotapi.ModeMarkdown
-
-	if _, err := b.api.Send(photo); err != nil {
-		log.Printf("Error sending 7d traffic chart: %v", err)
-	}
+		data.Status)
+	b.sendPhoto(chatID, "iran_traffic_7d.png", data.Chart7dBuffer, caption)
 }
 
 // sendASNTrafficChart sends the ASN traffic chart as a photo with caption
@@ -1019,30 +1000,6 @@ func (b *Bot) sendASNTrafficChart(chatID interface{}, data []*models.ASTrafficDa
 			item.StatusEmoji, item.Name, item.Percentage))
 	}
 
-	fileBytes := tgbotapi.FileBytes{
-		Name:  "asn_traffic_top.png",
-		Bytes: chartBuffer.Bytes(),
-	}
-
-	var photo tgbotapi.PhotoConfig
-	switch id := chatID.(type) {
-	case int64:
-		photo = tgbotapi.NewPhoto(id, fileBytes)
-	case string:
-		photo = tgbotapi.NewPhotoToChannel(id, fileBytes)
-	default:
-		log.Printf("Error: invalid chatID type for ASN chart: %T", chatID)
-		return
-	}
-
-	photo.Caption = caption.String()
-	photo.ParseMode = tgbotapi.ModeMarkdown
-
-	_, err := b.api.Send(photo)
-	if err != nil {
-		log.Printf("Error sending ASN traffic chart: %v", err)
-	} else {
-		log.Printf("✅ ASN traffic chart sent successfully")
-	}
+	b.sendPhoto(chatID, "asn_traffic_top.png", chartBuffer, caption.String())
 }
 

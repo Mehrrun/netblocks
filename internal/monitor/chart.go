@@ -214,7 +214,7 @@ func FormatTrafficStatus(data *models.TrafficData) string {
 	baseline := formatAbsoluteValue(data.Baseline, data.Unit)
 
 	heading := "*Iran Traffic — Volume Index*"
-	howToRead := "\n📖 *How to read:* Y-axis is Cloudflare’s *volume index* (~`0`–`1`), not bytes. Higher = more traffic; compare shape & % change."
+	howToRead := "\n📖 *How to read:* Y-axis is Cloudflare volume index (~0–1), not bytes. Higher = more traffic; compare shape and % change."
 	if !isIndexUnit(data.Unit) {
 		maxVal := data.CurrentLevel
 		for _, v := range data.Trend24h {
