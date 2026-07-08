@@ -177,8 +177,8 @@ DNS monitoring includes:
 ### Traffic Monitoring
 
 Traffic monitoring provides:
-- Absolute Iran NetFlows volume via Cloudflare Radar (primary), HTTP timeseries fallback
-- 24-hour and 7-day absolute traffic PNG charts (auto-scaled Y-axis with real units)
+- Iran NetFlows timeseries via Cloudflare Radar (primary), HTTP timeseries fallback
+- 24h / 7d PNG charts; when Radar returns a 0–1 volume index it is labeled as an index (not bytes)
 - Top Iranian ASNs by traffic share (up to 20)
 - Change detection vs a recent baseline window (not % of peak)
 - Status classification vs baseline: Normal (>70%), Degraded (30–70%), Throttled (10–30%), Shutdown (<10%)

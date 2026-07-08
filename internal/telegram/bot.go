@@ -18,14 +18,15 @@ import (
 
 // Bot represents the Telegram bot
 type Bot struct {
-	api            *tgbotapi.BotAPI
-	config         *config.Config
-	updateInterval time.Duration
-	intervalMu     sync.RWMutex   // Mutex for updateInterval
-	onStatusUpdate func() (*models.MonitoringResult, error)
+	api             *tgbotapi.BotAPI
+	config          *config.Config
+	updateInterval  time.Duration
+	intervalMu      sync.RWMutex // Mutex for updateInterval
+	onStatusUpdate  func() (*models.MonitoringResult, error)
 	subscribedChats map[int64]bool // Track users who have interacted with the bot
 	chatsMu         sync.RWMutex   // Mutex for subscribedChats
 	channelID       string         // Channel username or ID for periodic updates
+	botUsername     string         // Bot @username without @
 }
 
 // NewBot creates a new Telegram bot
@@ -80,6 +81,7 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 		onStatusUpdate:   onStatusUpdate,
 		subscribedChats:  make(map[int64]bool),
 		channelID:        channelID,
+		botUsername:      botInfo.UserName,
 	}
 
 	// Register slash-command hints in Telegram clients
@@ -101,17 +103,31 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 	return bot, nil
 }
 
+// botLink returns a t.me link for this bot when username is known
+func (b *Bot) botLink() string {
+	if b.botUsername == "" {
+		return ""
+	}
+	return "https://t.me/" + b.botUsername
+}
+
 // SendStartupMessage sends a startup notification to the channel
 func (b *Bot) SendStartupMessage(ctx context.Context) {
 	if b.channelID == "" {
 		return
 	}
-	
-	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Monitoring Iranian networks via Cloudflare Radar + RIPE RIS\n📊 Tracking %d ASNs and %d DNS servers\n📈 Channel posts: absolute traffic charts + short summary\n⏰ Channel updates about every 20 minutes\n\nUse /help for commands · Bot started: `%s`",
+
+	botLine := "Use /help for commands"
+	if link := b.botLink(); link != "" {
+		botLine = fmt.Sprintf("Chat with the bot: %s\nUse /help for commands", link)
+	}
+
+	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Monitoring Iranian networks via Cloudflare Radar + RIPE RIS\n📊 Tracking %d ASNs and %d DNS servers\n📈 Channel posts: traffic charts + short summary\n⏰ Channel updates about every 20 minutes\n\n%s\nBot started: `%s`",
 		len(b.config.IranASNs),
 		len(b.config.DNSServers),
+		botLine,
 		time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	log.Printf("📤 Sending startup message to channel: %s", b.channelID)
 	b.sendMessage(b.channelID, startupMsg)
 }
@@ -230,23 +246,33 @@ func (b *Bot) getSubscribedChats() []int64 {
 func (b *Bot) sendWelcome(chatID int64) {
 	intervalMinutes := int(b.getUpdateInterval().Minutes())
 
+	botLine := ""
+	if link := b.botLink(); link != "" {
+		botLine = fmt.Sprintf("\n🔗 Bot link: %s\n", link)
+	}
+
 	text := fmt.Sprintf("🤖 *Welcome to NetBlocks*\n\n"+
 		"I track Iran's internet health using:\n"+
-		"• *Cloudflare Radar* — absolute traffic volume & ISP share\n"+
+		"• *Cloudflare Radar* — traffic volume index & ISP share\n"+
 		"• *RIPE RIS Live* — Iranian ASN BGP connectivity\n"+
 		"• *DNS probes* — Iranian resolver / nameserver liveness\n\n"+
 		"*/status* sends charts first (not the long DNS list).\n"+
-		"Use */help* for the full guide.\n\n"+
-		"Personal updates every *%d* minutes — change with /interval.", intervalMinutes)
+		"Use */help* for the full guide.%s\n"+
+		"Personal updates every *%d* minutes — change with /interval.", botLine, intervalMinutes)
 
 	b.sendMessage(chatID, text)
 }
 
 func (b *Bot) sendHelp(chatID int64) {
-	text := `📖 *NetBlocks Help*
+	botLine := ""
+	if link := b.botLink(); link != "" {
+		botLine = "\n🔗 Bot: " + link + "\n"
+	}
 
+	text := `📖 *NetBlocks Help*
+` + botLine + `
 *Commands*
-/status — Iran absolute traffic charts + top ISP/ASN share + short alive counts
+/status — Iran traffic charts + top ISP/ASN share + short alive counts
 /dns — Full Iranian DNS server list (alive/down, by city)
 /asn — Full Iranian ASN BGP connectivity list
 /interval ` + "`<minutes>`" + ` — Personal DM update interval (example: /interval 20)
@@ -254,9 +280,8 @@ func (b *Bot) sendHelp(chatID int64) {
 /start — Short welcome
 
 *What the charts show*
-• *24h Iran chart* — absolute Cloudflare NetFlows volume (not % of peak)
-• *Top ASNs* — share of Iran traffic by ISP / AS
-• *7d chart* (when available) — longer absolute trend
+• *24h / 7d Iran chart* — Cloudflare Radar *volume index* for Iran (typically ~0–1). This is *not* bytes or “1 B = 1 billion”. Higher ≈ more traffic in that hour; compare the shape and % change vs baseline.
+• *Top ASNs* — share of Iran traffic by ISP / AS (percent)
 
 *Traffic status colors*
 🟢 Normal · 🟡 Degraded · 🟠 Throttled · 🔴 Shutdown
@@ -381,10 +406,17 @@ func (b *Bot) formatStatusSummary(result *models.MonitoringResult) string {
 			result.TrafficData.StatusEmoji,
 			result.TrafficData.Status,
 			result.TrafficData.ChangePercent))
+		unitLower := strings.ToLower(result.TrafficData.Unit)
+		if unitLower == "index" || strings.Contains(unitLower, "index") {
+			builder.WriteString("_Charts use Cloudflare volume index (~0–1), not bytes._\n")
+		}
 	} else {
 		builder.WriteString("📶 *Traffic:* unavailable\n")
 	}
 
+	if link := b.botLink(); link != "" {
+		builder.WriteString(fmt.Sprintf("\n🔗 %s", link))
+	}
 	builder.WriteString("\n_Full lists: /dns · /asn · Guide: /help_")
 	return builder.String()
 }
@@ -914,14 +946,29 @@ func (b *Bot) sendTrafficChart(chatID interface{}, data *models.TrafficData) {
 	}
 }
 
-// sendTrafficChart7d sends the 7d absolute traffic chart
+// sendTrafficChart7d sends the 7d traffic chart
 func (b *Bot) sendTrafficChart7d(chatID interface{}, data *models.TrafficData) {
 	if data == nil || data.Chart7dBuffer == nil || data.Chart7dBuffer.Len() == 0 {
 		return
 	}
 
-	caption := fmt.Sprintf("%s *Iran Traffic — Absolute (7d)*\n📈 Change vs mid-window baseline: `%+.1f%%`\n📊 Status: %s",
-		data.StatusEmoji, data.ChangePercent, data.Status)
+	heading := "*Iran Traffic — Absolute (7d)*"
+	howToRead := ""
+	current := fmt.Sprintf("%.3f", data.CurrentLevel)
+	unitLower := strings.ToLower(data.Unit)
+	if unitLower == "index" || strings.Contains(unitLower, "index") {
+		heading = "*Iran Traffic — Volume Index (7d)*"
+		current = fmt.Sprintf("%.3f (index)", data.CurrentLevel)
+		howToRead = "\n📖 Y-axis ≈ `0`–`1` (Cloudflare index), *not* bytes. `1.00` ≈ peak in this window."
+	}
+
+	caption := fmt.Sprintf("%s %s\n📶 *Current:* `%s`\n📈 *Change:* `%+.1f%%`\n📊 *Status:* %s%s",
+		data.StatusEmoji,
+		heading,
+		current,
+		data.ChangePercent,
+		data.Status,
+		howToRead)
 
 	fileBytes := tgbotapi.FileBytes{
 		Name:  "iran_traffic_7d.png",

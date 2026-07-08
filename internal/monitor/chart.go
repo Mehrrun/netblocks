@@ -22,7 +22,7 @@ func GenerateTrafficChart(data *TrafficData) (*bytes.Buffer, error) {
 		data.Timestamps,
 		data.Status,
 		data.Unit,
-		"Iran Internet Traffic — Absolute (24h)",
+		chartTitleForUnit(data.Unit, "24h"),
 		"Hours Ago",
 		true,
 	)
@@ -38,10 +38,17 @@ func GenerateTrafficChart7d(data *TrafficData) (*bytes.Buffer, error) {
 		data.Timestamps7d,
 		data.Status,
 		data.Unit,
-		"Iran Internet Traffic — Absolute (7d)",
+		chartTitleForUnit(data.Unit, "7d"),
 		"Days Ago",
 		false,
 	)
+}
+
+func chartTitleForUnit(unit, window string) string {
+	if isIndexUnit(unit) {
+		return fmt.Sprintf("Iran Internet Traffic — Volume Index (%s)", window)
+	}
+	return fmt.Sprintf("Iran Internet Traffic — Absolute (%s)", window)
 }
 
 func renderAbsoluteLineChart(values []float64, timestamps []time.Time, status, unit, title, xName string, hourly bool) (*bytes.Buffer, error) {
@@ -159,6 +166,8 @@ func statusLineColor(status string) drawing.Color {
 func axisLabelForUnit(unit string) string {
 	u := strings.ToLower(unit)
 	switch {
+	case isIndexUnit(u):
+		return "Volume Index (0–1)"
 	case strings.Contains(u, "byte"):
 		return "Traffic Volume"
 	case strings.Contains(u, "request"):
@@ -173,6 +182,9 @@ func axisLabelForUnit(unit string) string {
 
 func formatAxisValue(v float64, unit string) string {
 	u := strings.ToLower(unit)
+	if isIndexUnit(u) {
+		return fmt.Sprintf("%.2f", v)
+	}
 	if strings.Contains(u, "byte") {
 		return formatBytes(v)
 	}
@@ -189,19 +201,28 @@ func FormatTrafficStatus(data *models.TrafficData) string {
 	current := formatAbsoluteValue(data.CurrentLevel, data.Unit)
 	baseline := formatAbsoluteValue(data.Baseline, data.Unit)
 
+	heading := "*Iran Traffic (absolute)*"
+	howToRead := ""
+	if isIndexUnit(data.Unit) {
+		heading = "*Iran Traffic — Volume Index*"
+		howToRead = "\n📖 *How to read:* Y-axis is Cloudflare’s *volume index* (~`0`–`1`), not bytes. `1.00` ≈ recent peak for this window; compare shape & % change, not “GB”."
+	}
+
 	statusText := fmt.Sprintf(
-		"%s *Iran Traffic (absolute)*\n"+
+		"%s %s\n"+
 			"📶 *Current:* `%s`\n"+
 			"📐 *Baseline:* `%s`\n"+
 			"📈 *Change:* `%+.1f%%`\n"+
 			"📊 *Status:* %s\n"+
-			"⏱ *Updated:* %s ago",
+			"⏱ *Updated:* %s ago%s",
 		data.StatusEmoji,
+		heading,
 		current,
 		baseline,
 		data.ChangePercent,
 		data.Status,
 		timeStr,
+		howToRead,
 	)
 
 	if data.Status == "Shutdown" || data.Status == "Throttled" {

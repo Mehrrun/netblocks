@@ -197,14 +197,14 @@ func (tm *TrafficMonitor) FetchFromCloudflare(ctx context.Context) (*TrafficData
 			continue
 		}
 
-		timestamps, values, unit, found := extractSeriesWithMeta(apiResp.Result)
+		timestamps, values, unit, normalization, found := extractSeriesWithMeta(apiResp.Result)
 		if !found || len(values) == 0 {
 			lastErr = fmt.Errorf("no traffic data in response")
 			continue
 		}
-		if unit == "" {
-			unit = ep.unit
-		}
+		unit = resolveTrafficUnit(values, unit, normalization, ep.unit)
+		log.Printf("Radar series: points=%d max=%.4f unit=%s normalization=%s",
+			len(values), maxFloat(values), unit, normalization)
 
 		data, err := tm.processData(values, timestamps, unit, ep.source)
 		if err != nil {
@@ -267,14 +267,14 @@ func (tm *TrafficMonitor) Fetch7dFromCloudflare(ctx context.Context) (*TrafficDa
 			continue
 		}
 
-		timestamps, values, unit, found := extractSeriesWithMeta(apiResp.Result)
+		timestamps, values, unit, normalization, found := extractSeriesWithMeta(apiResp.Result)
 		if !found || len(values) == 0 {
 			lastErr = fmt.Errorf("no 7d traffic data")
 			continue
 		}
-		if unit == "" {
-			unit = ep.unit
-		}
+		unit = resolveTrafficUnit(values, unit, normalization, ep.unit)
+		log.Printf("Radar 7d series: points=%d max=%.4f unit=%s normalization=%s",
+			len(values), maxFloat(values), unit, normalization)
 
 		data, err := tm.processData7d(values, timestamps, unit, ep.source)
 		if err != nil {
@@ -315,8 +315,9 @@ type radarSerie struct {
 	Values     []interface{} `json:"values"`
 }
 
-func extractSeriesWithMeta(resultRaw json.RawMessage) ([]string, []float64, string, bool) {
+func extractSeriesWithMeta(resultRaw json.RawMessage) ([]string, []float64, string, string, bool) {
 	unit := ""
+	normalization := ""
 	var metaWrap struct {
 		Meta struct {
 			Units []struct {
@@ -330,9 +331,46 @@ func extractSeriesWithMeta(resultRaw json.RawMessage) ([]string, []float64, stri
 	if len(metaWrap.Meta.Units) > 0 && metaWrap.Meta.Units[0].Value != "" {
 		unit = metaWrap.Meta.Units[0].Value
 	}
+	normalization = metaWrap.Meta.Normalization
 
 	ts, vals, ok := extractSeries(resultRaw)
-	return ts, vals, unit, ok
+	return ts, vals, unit, normalization, ok
+}
+
+// resolveTrafficUnit picks a display unit. Cloudflare often returns a 0–1
+// volume index (MIN0_MAX / similar) even when meta.units says "bytes".
+func resolveTrafficUnit(values []float64, unit, normalization, fallback string) string {
+	maxVal := 0.0
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	norm := strings.ToUpper(normalization)
+	if strings.Contains(norm, "MIN0_MAX") || strings.Contains(norm, "MIN_MAX") {
+		return "index"
+	}
+	// Values clearly in a 0–1 (or slightly above) index range
+	if maxVal > 0 && maxVal <= 1.5 {
+		return "index"
+	}
+	if unit != "" && unit != "*" {
+		// Don't treat tiny "bytes" as real byte counts
+		if strings.Contains(strings.ToLower(unit), "byte") && maxVal <= 1.5 {
+			return "index"
+		}
+		return unit
+	}
+	if fallback != "" {
+		if strings.Contains(strings.ToLower(fallback), "byte") && maxVal <= 1.5 {
+			return "index"
+		}
+		return fallback
+	}
+	if maxVal <= 1.5 {
+		return "index"
+	}
+	return "volume"
 }
 
 func extractSeries(resultRaw json.RawMessage) ([]string, []float64, bool) {
@@ -849,10 +887,27 @@ func (tm *TrafficMonitor) determineASNStatus(percentage float64) (string, string
 	}
 }
 
-// formatAbsoluteValue formats a raw Radar value for logs/captions
+func maxFloat(values []float64) float64 {
+	maxVal := 0.0
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	return maxVal
+}
+
+func isIndexUnit(unit string) bool {
+	u := strings.ToLower(unit)
+	return u == "index" || strings.Contains(u, "index") || u == "ratio"
+}
+
+// formatAbsoluteValue formats a Radar value for logs/captions
 func formatAbsoluteValue(v float64, unit string) string {
 	u := strings.ToLower(unit)
 	switch {
+	case isIndexUnit(u):
+		return fmt.Sprintf("%.3f (index)", v)
 	case strings.Contains(u, "byte"):
 		return formatBytes(v)
 	case strings.Contains(u, "request"):
@@ -863,15 +918,19 @@ func formatAbsoluteValue(v float64, unit string) string {
 }
 
 func formatBytes(v float64) string {
+	// Never label sub-byte / index-scale values as "B" (that produced "0 B" / "1 B")
+	if v < 1024 {
+		if v < 10 {
+			return fmt.Sprintf("%.3f", v)
+		}
+		return fmt.Sprintf("%.1f B", v)
+	}
 	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
 	x := v
 	i := 0
 	for x >= 1024 && i < len(units)-1 {
 		x /= 1024
 		i++
-	}
-	if i == 0 {
-		return fmt.Sprintf("%.0f %s", x, units[i])
 	}
 	return fmt.Sprintf("%.2f %s", x, units[i])
 }
@@ -891,6 +950,9 @@ func formatCompact(v float64) string {
 	case abs >= 1e3:
 		return fmt.Sprintf("%.2fK", v/1e3)
 	default:
+		if abs < 10 {
+			return fmt.Sprintf("%.3f", v)
+		}
 		return fmt.Sprintf("%.2f", v)
 	}
 }
