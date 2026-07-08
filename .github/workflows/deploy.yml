@@ -14,9 +14,11 @@ on:
   # Cron caused multiple workflow instances running simultaneously
   # API trigger is more reliable and prevents overlaps
 
-# Concurrency control: Remove group restriction to allow parallel runs
-# Multiple bot instances can run simultaneously when auto-restart triggers new run
-# Note: Not using concurrency group allows instant parallel execution
+# Only one bot instance at a time — overlapping runs caused duplicate channel posts
+# (old code still dumping DNS lists) and /asn menu conflicts.
+concurrency:
+  group: netblocks-bot
+  cancel-in-progress: true
 
 permissions:
   contents: read  # Read-only permissions

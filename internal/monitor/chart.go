@@ -12,43 +12,55 @@ import (
 	"github.com/wcharczuk/go-chart/v2/drawing"
 )
 
-// GenerateTrafficChart generates a PNG chart of absolute Iran traffic (24h)
+// GenerateTrafficChart generates a PNG chart of Iran traffic (24h)
 func GenerateTrafficChart(data *TrafficData) (*bytes.Buffer, error) {
 	if data == nil || len(data.Trend24h) == 0 {
 		return nil, fmt.Errorf("no traffic data available")
 	}
+	unit := displayUnit(data.Unit, data.Trend24h)
 	return renderAbsoluteLineChart(
 		data.Trend24h,
 		data.Timestamps,
 		data.Status,
-		data.Unit,
-		chartTitleForUnit(data.Unit, "24h"),
+		unit,
+		fmt.Sprintf("Iran Internet Traffic — Volume Index (24h)"),
 		"Hours Ago",
 		true,
 	)
 }
 
-// GenerateTrafficChart7d generates a PNG chart of absolute Iran traffic (7d)
+// GenerateTrafficChart7d generates a PNG chart of Iran traffic (7d)
 func GenerateTrafficChart7d(data *TrafficData) (*bytes.Buffer, error) {
 	if data == nil || len(data.Trend7d) == 0 {
 		return nil, fmt.Errorf("no 7d traffic data available")
 	}
+	unit := displayUnit(data.Unit, data.Trend7d)
 	return renderAbsoluteLineChart(
 		data.Trend7d,
 		data.Timestamps7d,
 		data.Status,
-		data.Unit,
-		chartTitleForUnit(data.Unit, "7d"),
+		unit,
+		fmt.Sprintf("Iran Internet Traffic — Volume Index (7d)"),
 		"Days Ago",
 		false,
 	)
 }
 
-func chartTitleForUnit(unit, window string) string {
+// displayUnit forces index labeling when values are in the 0–1 Radar index range
+func displayUnit(unit string, values []float64) string {
 	if isIndexUnit(unit) {
-		return fmt.Sprintf("Iran Internet Traffic — Volume Index (%s)", window)
+		return "index"
 	}
-	return fmt.Sprintf("Iran Internet Traffic — Absolute (%s)", window)
+	maxVal := 0.0
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	if maxVal > 0 && maxVal <= 1.5 {
+		return "index"
+	}
+	return unit
 }
 
 func renderAbsoluteLineChart(values []float64, timestamps []time.Time, status, unit, title, xName string, hourly bool) (*bytes.Buffer, error) {
@@ -201,11 +213,24 @@ func FormatTrafficStatus(data *models.TrafficData) string {
 	current := formatAbsoluteValue(data.CurrentLevel, data.Unit)
 	baseline := formatAbsoluteValue(data.Baseline, data.Unit)
 
-	heading := "*Iran Traffic (absolute)*"
-	howToRead := ""
-	if isIndexUnit(data.Unit) {
-		heading = "*Iran Traffic — Volume Index*"
-		howToRead = "\n📖 *How to read:* Y-axis is Cloudflare’s *volume index* (~`0`–`1`), not bytes. `1.00` ≈ recent peak for this window; compare shape & % change, not “GB”."
+	heading := "*Iran Traffic — Volume Index*"
+	howToRead := "\n📖 *How to read:* Y-axis is Cloudflare’s *volume index* (~`0`–`1`), not bytes. Higher = more traffic; compare shape & % change."
+	if !isIndexUnit(data.Unit) {
+		maxVal := data.CurrentLevel
+		for _, v := range data.Trend24h {
+			if v > maxVal {
+				maxVal = v
+			}
+		}
+		for _, v := range data.Trend7d {
+			if v > maxVal {
+				maxVal = v
+			}
+		}
+		if maxVal > 1.5 {
+			heading = "*Iran Traffic*"
+			howToRead = ""
+		}
 	}
 
 	statusText := fmt.Sprintf(

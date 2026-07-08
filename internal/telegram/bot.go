@@ -103,12 +103,11 @@ func NewBot(token string, cfg *config.Config, onStatusUpdate func() (*models.Mon
 	return bot, nil
 }
 
-// botLink returns a t.me link for this bot when username is known
+const publicBotLink = "https://t.me/NetBlocksIranBlackout_bot"
+
+// botLink returns the public bot link for channel followers
 func (b *Bot) botLink() string {
-	if b.botUsername == "" {
-		return ""
-	}
-	return "https://t.me/" + b.botUsername
+	return publicBotLink
 }
 
 // SendStartupMessage sends a startup notification to the channel
@@ -117,15 +116,11 @@ func (b *Bot) SendStartupMessage(ctx context.Context) {
 		return
 	}
 
-	botLine := "Use /help for commands"
-	if link := b.botLink(); link != "" {
-		botLine = fmt.Sprintf("Chat with the bot: %s\nUse /help for commands", link)
-	}
-
-	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n✅ Monitoring Iranian networks via Cloudflare Radar + RIPE RIS\n📊 Tracking %d ASNs and %d DNS servers\n📈 Channel posts: traffic charts + short summary\n⏰ Channel updates about every 20 minutes\n\n%s\nBot started: `%s`",
-		len(b.config.IranASNs),
-		len(b.config.DNSServers),
-		botLine,
+	startupMsg := fmt.Sprintf("🚀 *NetBlocks Bot Started*\n\n"+
+		"📈 Channel posts: Iran traffic charts only\n"+
+		"🤖 Open the bot for DNS/ASN details & commands:\n%s\n\n"+
+		"Bot started: `%s`",
+		publicBotLink,
 		time.Now().Format("2006-01-02 15:04:05"))
 
 	log.Printf("📤 Sending startup message to channel: %s", b.channelID)
@@ -182,46 +177,45 @@ func (b *Bot) Start(ctx context.Context) {
 }
 
 func (b *Bot) handleMessage(msg *tgbotapi.Message) {
-	// Add user to subscribed chats when they interact with the bot
-	b.addSubscribedChat(msg.Chat.ID)
-	
-	// Handle empty messages
+	// Only track private chats for personal periodic DMs (not channels/groups)
+	if msg.Chat != nil && msg.Chat.IsPrivate() {
+		b.addSubscribedChat(msg.Chat.ID)
+	}
+
 	if msg.Text == "" {
-		log.Printf("⚠️ Received message with empty text from user %d", msg.Chat.ID)
 		return
 	}
-	
-	command := strings.ToLower(strings.TrimSpace(msg.Text))
-	log.Printf("🔍 Processing command: %s", command)
-	
-	switch {
-	case strings.HasPrefix(command, "/start"):
-		log.Println("📤 Sending welcome message...")
-		b.sendWelcome(msg.Chat.ID)
-	case strings.HasPrefix(command, "/status"):
-		log.Println("📤 Sending status update...")
-		b.sendStatus(msg.Chat.ID)
-	case strings.HasPrefix(command, "/dns"):
-		log.Println("📤 Sending DNS status...")
-		b.sendDNSOnly(msg.Chat.ID)
-	case strings.HasPrefix(command, "/asn"):
-		log.Println("📤 Sending ASN status...")
-		b.sendASNOnly(msg.Chat.ID)
-	case strings.HasPrefix(command, "/interval"):
-		parts := strings.Fields(command)
-		if len(parts) > 1 {
-			log.Printf("📤 Setting interval to %s minutes...", parts[1])
-			b.handleSetInterval(msg.Chat.ID, parts[1])
-		} else {
-			b.sendMessage(msg.Chat.ID, "Usage: `/interval <minutes>`\nExample: `/interval 20`")
+
+	// Prefer Telegram's Command() so /asn@BotName from the menu works
+	if msg.IsCommand() {
+		cmd := strings.ToLower(msg.Command())
+		args := strings.TrimSpace(msg.CommandArguments())
+		log.Printf("🔍 Processing command: /%s (args=%q raw=%q)", cmd, args, msg.Text)
+
+		switch cmd {
+		case "start":
+			b.sendWelcome(msg.Chat.ID)
+		case "status":
+			b.sendStatus(msg.Chat.ID)
+		case "dns":
+			b.sendDNSOnly(msg.Chat.ID)
+		case "asn":
+			b.sendASNOnly(msg.Chat.ID)
+		case "interval":
+			if args != "" {
+				b.handleSetInterval(msg.Chat.ID, strings.Fields(args)[0])
+			} else {
+				b.sendMessage(msg.Chat.ID, "Usage: `/interval <minutes>`\nExample: `/interval 20`")
+			}
+		case "help":
+			b.sendHelp(msg.Chat.ID)
+		default:
+			b.sendMessage(msg.Chat.ID, "Unknown command. Use /help to see available commands.")
 		}
-	case strings.HasPrefix(command, "/help"):
-		log.Println("📤 Sending help message...")
-		b.sendHelp(msg.Chat.ID)
-	default:
-		log.Printf("❓ Unknown command: %s", command)
-		b.sendMessage(msg.Chat.ID, "Unknown command. Use /help to see available commands.")
+		return
 	}
+
+	b.sendMessage(msg.Chat.ID, "Unknown command. Use /help to see available commands.")
 }
 
 // addSubscribedChat adds a chat ID to the subscribed chats list
@@ -246,51 +240,44 @@ func (b *Bot) getSubscribedChats() []int64 {
 func (b *Bot) sendWelcome(chatID int64) {
 	intervalMinutes := int(b.getUpdateInterval().Minutes())
 
-	botLine := ""
-	if link := b.botLink(); link != "" {
-		botLine = fmt.Sprintf("\n🔗 Bot link: %s\n", link)
-	}
-
 	text := fmt.Sprintf("🤖 *Welcome to NetBlocks*\n\n"+
 		"I track Iran's internet health using:\n"+
 		"• *Cloudflare Radar* — traffic volume index & ISP share\n"+
 		"• *RIPE RIS Live* — Iranian ASN BGP connectivity\n"+
 		"• *DNS probes* — Iranian resolver / nameserver liveness\n\n"+
-		"*/status* sends charts first (not the long DNS list).\n"+
-		"Use */help* for the full guide.%s\n"+
-		"Personal updates every *%d* minutes — change with /interval.", botLine, intervalMinutes)
+		"*/status* → charts + short summary\n"+
+		"*/dns* / */asn* → full lists when you need them\n"+
+		"*/help* → full guide\n\n"+
+		"🔗 %s\n\n"+
+		"Personal updates every *%d* minutes — change with /interval.",
+		publicBotLink, intervalMinutes)
 
 	b.sendMessage(chatID, text)
 }
 
 func (b *Bot) sendHelp(chatID int64) {
-	botLine := ""
-	if link := b.botLink(); link != "" {
-		botLine = "\n🔗 Bot: " + link + "\n"
-	}
-
 	text := `📖 *NetBlocks Help*
-` + botLine + `
+
+🔗 ` + publicBotLink + `
+
 *Commands*
-/status — Iran traffic charts + top ISP/ASN share + short alive counts
-/dns — Full Iranian DNS server list (alive/down, by city)
-/asn — Full Iranian ASN BGP connectivity list
-/interval ` + "`<minutes>`" + ` — Personal DM update interval (example: /interval 20)
+/status — Iran traffic charts + top ISP/ASN share + short counts
+/dns — Full Iranian DNS server list
+/asn — Full Iranian ASN BGP list
+/interval ` + "`<minutes>`" + ` — Personal update interval (e.g. /interval 20)
 /help — This guide
 /start — Short welcome
 
-*What the charts show*
-• *24h / 7d Iran chart* — Cloudflare Radar *volume index* for Iran (typically ~0–1). This is *not* bytes or “1 B = 1 billion”. Higher ≈ more traffic in that hour; compare the shape and % change vs baseline.
-• *Top ASNs* — share of Iran traffic by ISP / AS (percent)
+*How to read charts*
+• Iran 24h / 7d: Cloudflare *volume index* (~0–1), *not* bytes. Higher = more traffic.
+• Top ASNs: share of Iran traffic by ISP (percent)
 
-*Traffic status colors*
+*Traffic status*
 🟢 Normal · 🟡 Degraded · 🟠 Throttled · 🔴 Shutdown
-(compared to a recent baseline window)
 
 *Tips*
-• Channel posts use the same chart-first format
-• Use /dns or /asn only when you need the full lists — they are long
-• Data sources: Cloudflare Radar + RIPE RIS Live`
+• Channel posts are charts only — open the bot for DNS/ASN details
+• Data: Cloudflare Radar + RIPE RIS Live`
 
 	b.sendMessage(chatID, text)
 }
@@ -380,7 +367,7 @@ func (b *Bot) sendASNOnly(chatID int64) {
 	b.sendMessage(chatID, asnText)
 }
 
-// formatStatusSummary builds a short alive-count summary for chart-first status
+// formatStatusSummary builds a short summary for private /status
 func (b *Bot) formatStatusSummary(result *models.MonitoringResult) string {
 	asnUp, asnTotal := 0, len(result.ASNStatuses)
 	for _, s := range result.ASNStatuses {
@@ -406,18 +393,33 @@ func (b *Bot) formatStatusSummary(result *models.MonitoringResult) string {
 			result.TrafficData.StatusEmoji,
 			result.TrafficData.Status,
 			result.TrafficData.ChangePercent))
-		unitLower := strings.ToLower(result.TrafficData.Unit)
-		if unitLower == "index" || strings.Contains(unitLower, "index") {
-			builder.WriteString("_Charts use Cloudflare volume index (~0–1), not bytes._\n")
-		}
+		builder.WriteString("_Y-axis is Cloudflare volume index (~0–1), not bytes._\n")
 	} else {
 		builder.WriteString("📶 *Traffic:* unavailable\n")
 	}
 
-	if link := b.botLink(); link != "" {
-		builder.WriteString(fmt.Sprintf("\n🔗 %s", link))
-	}
+	builder.WriteString(fmt.Sprintf("\n🔗 %s", publicBotLink))
 	builder.WriteString("\n_Full lists: /dns · /asn · Guide: /help_")
+	return builder.String()
+}
+
+// formatChannelSummary is charts-only intro for the public channel (no DNS/ASN lists)
+func (b *Bot) formatChannelSummary(result *models.MonitoringResult) string {
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("📊 *Iran Internet Status*\n⏰ `%s`\n\n",
+		result.Timestamp.Format("2006-01-02 15:04:05")))
+
+	if result.TrafficData != nil {
+		builder.WriteString(fmt.Sprintf("%s *Traffic:* %s (`%+.1f%%` vs baseline)\n",
+			result.TrafficData.StatusEmoji,
+			result.TrafficData.Status,
+			result.TrafficData.ChangePercent))
+		builder.WriteString("_Charts: Cloudflare volume index (~0–1). Higher = more traffic._\n")
+	} else {
+		builder.WriteString("📶 *Traffic:* unavailable\n")
+	}
+
+	builder.WriteString(fmt.Sprintf("\n🤖 Open the bot for DNS/ASN details:\n%s", publicBotLink))
 	return builder.String()
 }
 
@@ -780,13 +782,22 @@ func (b *Bot) sendMessage(chatID interface{}, text string) {
 	}
 }
 
-// sendStatusMessages sends chart-first status: summary → 24h → ASN → optional 7d
+// sendStatusMessages sends private /status: short summary + charts only (no DNS/ASN walls)
 func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringResult) {
 	b.sendMessage(chatID, b.formatStatusSummary(result))
+	b.sendTrafficChartsOnly(chatID, result)
+}
 
+// sendChannelStatus sends public channel updates: bot link + charts only (never DNS/ASN lists)
+func (b *Bot) sendChannelStatus(chatID interface{}, result *models.MonitoringResult) {
+	b.sendMessage(chatID, b.formatChannelSummary(result))
+	b.sendTrafficChartsOnly(chatID, result)
+}
+
+func (b *Bot) sendTrafficChartsOnly(chatID interface{}, result *models.MonitoringResult) {
 	if result.TrafficData != nil {
 		if result.TrafficData.ChartBuffer != nil && result.TrafficData.ChartBuffer.Len() > 0 {
-			log.Printf("📈 Sending Iran 24h absolute traffic chart")
+			log.Printf("📈 Sending Iran 24h traffic chart")
 			b.sendTrafficChart(chatID, result.TrafficData)
 		} else {
 			log.Printf("⚠️  Traffic chart buffer is empty - skipping 24h chart")
@@ -808,7 +819,7 @@ func (b *Bot) sendStatusMessages(chatID interface{}, result *models.MonitoringRe
 	}
 
 	if result.TrafficData != nil && result.TrafficData.Chart7dBuffer != nil && result.TrafficData.Chart7dBuffer.Len() > 0 {
-		log.Printf("📈 Sending Iran 7d absolute traffic chart")
+		log.Printf("📈 Sending Iran 7d traffic chart")
 		b.sendTrafficChart7d(chatID, result.TrafficData)
 	}
 }
@@ -892,10 +903,10 @@ func (b *Bot) SendPeriodicUpdates(ctx context.Context) {
 						continue
 					}
 					
-					// Send to channel if it's time (every 20 minutes)
+					// Send to channel if it's time (every 20 minutes) — charts only, never DNS lists
 					if shouldSendChannelUpdate {
-						log.Printf("📢 Sending periodic update to channel: %s (interval: %v)", b.channelID, channelInterval)
-						b.sendStatusMessages(b.channelID, result)
+						log.Printf("📢 Sending charts-only update to channel: %s (interval: %v)", b.channelID, channelInterval)
+						b.sendChannelStatus(b.channelID, result)
 						lastChannelUpdateTime = time.Now()
 						log.Printf("✅ Channel update sent successfully to: %s", b.channelID)
 					}
@@ -952,15 +963,9 @@ func (b *Bot) sendTrafficChart7d(chatID interface{}, data *models.TrafficData) {
 		return
 	}
 
-	heading := "*Iran Traffic — Absolute (7d)*"
-	howToRead := ""
-	current := fmt.Sprintf("%.3f", data.CurrentLevel)
-	unitLower := strings.ToLower(data.Unit)
-	if unitLower == "index" || strings.Contains(unitLower, "index") {
-		heading = "*Iran Traffic — Volume Index (7d)*"
-		current = fmt.Sprintf("%.3f (index)", data.CurrentLevel)
-		howToRead = "\n📖 Y-axis ≈ `0`–`1` (Cloudflare index), *not* bytes. `1.00` ≈ peak in this window."
-	}
+	heading := "*Iran Traffic — Volume Index (7d)*"
+	current := fmt.Sprintf("%.3f (index)", data.CurrentLevel)
+	howToRead := "\n📖 Y-axis ≈ `0`–`1` (Cloudflare index), *not* bytes. Higher = more traffic."
 
 	caption := fmt.Sprintf("%s %s\n📶 *Current:* `%s`\n📈 *Change:* `%+.1f%%`\n📊 *Status:* %s%s",
 		data.StatusEmoji,
