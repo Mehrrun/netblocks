@@ -10,12 +10,10 @@ on:
       - 'go.mod'
       - 'go.sum'
   workflow_dispatch:
-  # Removed cron schedule - using API trigger at 5h 30m instead
-  # Cron caused multiple workflow instances running simultaneously
-  # API trigger is more reliable and prevents overlaps
+  # Self-restart inside the job at 5h50m (see monitor loop). No cron:
+  # schedule + cancel-in-progress would kill healthy runs mid-window.
 
-# Only one bot instance at a time — overlapping runs caused duplicate channel posts
-# (old code still dumping DNS lists) and /asn menu conflicts.
+# Only one bot instance at a time — overlapping runs caused duplicate channel posts.
 concurrency:
   group: netblocks-bot
   cancel-in-progress: true
@@ -414,21 +412,20 @@ jobs:
         
         echo "=========================================="
         echo ""
-        echo "This workflow will run until GitHub Actions 6-hour limit."
-        echo "A new instance will be auto-triggered at 5 hours 30 minutes."
-        echo "Multiple bot instances may run simultaneously (this is acceptable)."
+        echo "This workflow will run until GitHub Actions 6-hour job limit."
+        echo "A new instance will be auto-triggered at 5 hours 50 minutes."
         echo ""
         echo "=========================================="
         echo ""
         
-        # Calculate restart time (5 hours 30 minutes = 330 minutes = 19800 seconds)
-        # GitHub Actions free tier has 6-hour limit, restart at 5h 30m to be safe
-        RESTART_SECONDS=19800  # 5 hours 30 minutes (330 minutes)
+        # GitHub-hosted jobs hard-stop at 6h. Restart as late as possible so each
+        # run stays online ~5h50m (leave ~10m for the next job to build & start).
+        RESTART_SECONDS=21000  # 5 hours 50 minutes (350 minutes)
         START_TIME=$(date +%s)
         RESTART_TIME=$((START_TIME + RESTART_SECONDS))
         
         echo "⏰ Bot will auto-restart at $(date -d @$RESTART_TIME '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "   (This is 5 hours 30 minutes from now to avoid GitHub Actions 6-hour limit)"
+        echo "   (5h 50m from now — max safe window before the 6h GitHub limit)"
         echo ""
         
         # Get repository and workflow info for API trigger
@@ -454,7 +451,7 @@ jobs:
             echo "=========================================="
             echo "🔄 Auto-restarting workflow to avoid 6-hour limit"
             echo "   Current time: $(date '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "   Bot has been running for ~5 hours 30 minutes"
+            echo "   Bot has been running for ~5 hours 50 minutes"
             echo "=========================================="
             echo ""
             
